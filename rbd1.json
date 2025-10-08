@@ -1,0 +1,63 @@
+{
+  "kind": "StatefulSet", 
+  "spec": {
+    "replicas": 1, 
+    "selector": {
+      "matchLabels": {
+        "app": "pgsql-rbd1"
+      }
+    }, 
+    "serviceName": "pgsql-rbd1-service", 
+    "template": {
+      "spec": {
+        "containers": [
+          {
+            "image": "postgres:13.4", 
+            "volumeMounts": [
+              {
+                "mountPath": "/data", 
+                "name": "pgsql-rbd1-disk"
+              }
+            ], 
+            "name": "pgsql-rbd1", 
+            "env": [
+              {
+                "name": "POSTGRES_PASSWORD", 
+                "value": "rbd1"
+              }, 
+              {
+                "name": "PGDATA", 
+                "value": "/data/pgdata"
+              }
+            ]
+          }
+        ], 
+        "nodeSelector": {
+          "kubernetes.io/hostname": "k3d-rbdcluster-server-0"
+        }
+      }, 
+      "metadata": {
+        "labels": {
+          "app": "pgsql-rbd1"
+        }
+      }
+    }, 
+    "volumeClaimTemplates": [
+      {
+        "spec": {
+          "accessModes": [
+            "ReadWriteOnce"
+          ], 
+          "resources": {
+            "requests": {
+              "storage": "25Mi"
+            }
+          }
+        }, 
+        "metadata": {
+          "name": "pgsql-rbd1-disk"
+        }
+      }
+    ]
+  }, 
+  "apiVersion": 

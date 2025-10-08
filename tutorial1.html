@@ -1,0 +1,1328 @@
+<article class="tutorial">
+    <h1 id="przetwarzanie-rozproszone-w-szbd-postgres">Przetwarzanie
+        rozproszone w SZBD Postgres</h1>
+    Celem zajęć jest zapoznanie się z własnościami SZBD Postgres
+    umożliwiającymi przetwarzanie rozproszone. Własności te obejmują:
+    <ul>
+        <li>
+            Transparenty dostęp do zdalnych danych.
+        </li>
+        <li>
+            Rozproszone transakcje.
+        </li>
+        <li>
+            Obsługa rozproszonych zakleszczeń.
+        </li>
+        <li>
+            Podstawowa replikacja danych.
+        </li>
+    </ul>
+    <h2 id="przygotowanie-środowiska">Przygotowanie środowiska</h2>
+    <p>Do ilustracji przetwarzania rozproszonego będziemy korzystać ze
+        środowiska Kubernetes (w skrócie K8s). Środowisko to służy do
+        orkiestracji skonteneryzowanych, rozproszonych aplikacji o architekturze
+        mikro-usługowej. Głównymi zadaniami orkiestracji są: wdrożenie
+        skonteneryzowanych składników aplikacji, dynamiczne skalowanie aplikacji
+        na żądanie, automatyczne odtwarzanie składników aplikacji, uaktualnianie
+        i wycofywanie aktualizacji bezstanowych składników aplikacji z
+        zachowaniem ciągłości ich pracy. Konteneryzacja aplikacji polega na
+        uruchomieniu jej w kontenerach, które są lekką odmianą mechanizmu
+        wirtualizacji umożliwiającą separację różnych składników aplikacji i
+        kontrolę przydziału do nich zasobów (pamięć, procesor, dysk, sieć).
+        Najpopularniejszym środowiskiem konteneryzacji jest Docker. Architektura
+        mikro-usługowa jest sposobem do projektowania dużych systemów aplikacji,
+        które wykorzystuje podejście podziału systemu na wiele składników,
+        nazywanych mikro-usługami, komunikujących się ze sobą najczęściej
+        asynchronicznie z wykorzystaniem systemów kolejkowych (np. Kafka,
+        RabbitMQ), które w celu uzyskania skalowalności rozprasza się na wiele
+        maszyn. W ramach zajęć skupimy się składnikach aplikacji, które służą do
+        trwałego składowania rozproszonych danych, czyli na rozproszonych bazach
+        danych.</p>
+    <p>Kubernetes jest otwarto-źródłowym systemem rozwijanym przez Google.
+        Jego usługi są oferowane przez największych dostawców rozwiązań
+        chmurowych, np.: Google Cloud, Amazon AWS, Microsoft Azure, Alibaba
+        Cloud oraz przez mniejszych dostawców np. Hosted Rancher. Kubernetes
+        można też wdrożyć na własnych serwerach. W celu uniezależnienia się od
+        infrastruktury chmurowej i sprzętowej wykorzystamy jedną z dystrybucji
+        deweloperskich Kubernetes o nazwie <em>k3d</em>, którą można uruchomić
+        na sprzęcie klasy desktop. <em>K3d</em> w odróżnieniu od innych
+        dystrybucji deweloperskich Kubernetes np. <em>k3s</em> lub
+        <em>Minikube</em> symuluje wiele węzłów klastra co umożliwia zwiększenie
+        realizmu. Pliki manifestów opisujące sposób wdrożenia aplikacji
+        przygotowane dla <em>k3d</em> po nieznacznych uzupełnieniach można
+        wykorzystać w realnym środowisku chmurowym. <em>K3d</em> ma architekturę
+        matrioszki, jest uruchamiany jako zbiór kontenerów Docker, każdy węzeł
+        klastra <em>k3d</em> posiada własny kontener. Wewnątrz tych kontenerów
+        są uruchamiane kontenery zawierające <em>k3s</em>, z kolei w tych
+        kontenerach są uruchamiane kontenery udostępniające funkcjonalność
+        Kubernetes i kontenery użytkownika.
+    </p>
+
+    <p> Przygotowanie środowiska rozpoczniemy od zainstalowania Docker i
+        <em>k3d</em>.
+    </p>
+
+    <ol>
+        <li>
+            Zaloguj się do maszyny wirtualnej jako użytkownik rbd używając
+            hasła rbd#2502.
+        </li>
+        <li>
+            Otwórz okno terminala, który nazwiemy terminalem
+            pomocniczym.
+        </li>
+        <li>
+            Skonfiguruj menedżera pakietów do zainstalowania pakietu Doker, w
+            tym celu wykonaj poniższe polecenia.
+        </li>
+        <pre><code>sudo apt-get update
+sudo apt-get -y install ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+  https://download.docker.com/linux/debian \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update</code></pre>
+        <li>
+            Zainstaluj Docker wykonując w terminalu pomocniczym poniższe
+            polecenia:<br />
+        </li>
+
+        <pre><code>sudo apt-get -y install docker-ce=5:28.4.0-1~debian.13~trixie \
+    docker-ce-cli=5:28.4.0-1~debian.13~trixie \
+    containerd.io=1.7.28-0~debian.13~trixie \
+    docker-buildx-plugin=0.28.0-0~debian.13~trixie \
+    docker-compose-plugin=2.39.4-0~debian.13~trixie</code></pre>
+        <li>
+            Uruchom Docker oraz skonfiguruj jego automatyczne uruchamianie
+            wraz ze startem systemu operacyjnego. Wykorzystaj w tym celu poniższe
+            polecenia.
+        </li>
+        <pre><code>sudo systemctl start docker
+sudo systemctl enable docker</code></pre>
+        <li>
+            Dodaj użytkownika rbd do grupy docker wykonując
+            polecenie:
+        </li>
+        <pre><code>sudo usermod -aG docker rbd</code></pre>
+        <li>
+            Wyloguj się i zaloguj ponownie w celu zaaplikowania zmian
+            wprowadzonych w poprzednim punkcie. Uruchom ponownie terminal
+            pomocniczy.
+        </li>
+        <li>
+            Zainstaluj k3d wykonując w terminalu pomocniczym poniższe
+            polecenie:
+            <pre><code>wget -q -O - https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | TAG=v5.8.3 bash</code></pre>
+
+        </li>
+        <li>
+            Skonfiguruj menedżera pakietów do zainstalowania pakietu
+            Kubernetes, wykonaj w tym celu poniższe polecenie:
+
+            <pre><code>sudo apt-get install -y apt-transport-https ca-certificates curl gnupg
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.34/deb/Release.key \
+    | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+sudo chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] \
+    https://pkgs.k8s.io/core:/stable:/v1.34/deb/ /" \
+    | sudo tee /etc/apt/sources.list.d/kubernetes.list
+sudo chmod 644 /etc/apt/sources.list.d/kubernetes.list
+</code></pre>
+        </li>
+        <li>
+            Zainstaluj narzędzie kubectl, które umożliwi zarządzanie
+            Kubernetes działającym w <em>k3d</em>. W tym celu uruchom poniższe
+            polecenie:
+            <pre><code>sudo apt-get -y install kubectl=1.32.3+ds-2</code></pre>
+        </li>
+        <li>
+            W kolejnym kroku utwórz klaster węzłów <em>k3d</em>, wykorzystaj
+            poniższe polecenie:
+            <pre><code>k3d cluster create RBDcluster --servers 1 --agents 4 --image rancher/k3s:v1.22.2-k3s1 \
+    -p "5432-5435:5432-5435@loadbalancer"
+</code></pre>
+        </li>
+
+        RBDcluster jest nazwą klastra. Klaster Kubernetes składa się z dwóch
+        rodzajów węzłów: <em>control plane</em> (<em>server</em> w nazewnictwie
+        <em>k3d</em>), <em>worker node</em> (<em>agent</em> w nazewnictwie
+        <em>k3d</em>). Agenty posiadają infrastrukturę przeznaczoną do
+        uruchamiania kontenerów użytkownika. Zwiększanie liczby agentów głównie
+        służy do zwiększanie skalowalności klastra przez rozpraszanie ich na
+        wiele maszyn. Serwery zlecają zadania agentom, wykrywają i reagują na
+        zdarzenia w klastrze (np. awarię agenta) oraz przechowują metadane
+        opisujące stan klastra. Zwiększanie liczby serwerów służy głównie do
+        zwiększania niezawodności działania funkcji systemowych klastra.
+        Dodatkowym elementem klastra w dystrybucji <em>k3d</em> jest węzeł
+        równoważenia obciążenia (<em>load balancer</em>), który zazwyczaj jest
+        elementem infrastruktury dostawcy usług chmurowych. Węzeł ten
+        odpowiedzialny za równomierne rozpraszanie żądań połączeń do replik
+        usług użytkownika. Przełącznik <em>servers</em> służy do określenia
+        liczby serwerów, przełącznik <em>agents</em> określa liczbę agentów,
+        przełącznik <em>image</em> wskazuje na obraz kontenera zawierającego
+        komponent <em>k3s</em>, przełącznik <em>port</em> umożliwia
+        przekazywanie portów (ang. port forwarding) z węzłów klastra na adresy
+        maszyny, na której jest uruchomiony <em>k3d</em>. W naszym przypadku
+        przekazywane są 4 porty, od 5432 do 5433 z węzła loadbalancer. Zabieg
+        ten umożliwia wykorzystanie adresu <em>localhost</em> do komunikacji z
+        loadbalancer. Chociaż adres loadbalancer jest dostępny na maszynie
+        gospodarza, to jego wartość nie jest z góry znana i jest dynamicznie
+        ustalana podczas tworzenia klastra. Na potrzeby ćwiczeń łatwiej będzie
+        posługiwać się adresem <em>localhost</em> maszyny gospodarza.
+
+        <li>
+            Uruchom poniższe polecenie aby sprawdzić jakie klastry zostały
+            uruchomione w <em>k3d</em>:
+            <pre><code>k3d cluster list</code></pre>
+        </li>
+        <li>
+            Wyświetl listę węzłów klastrów <em>k3d</em>, uruchom poniższe
+            polecenie;
+            <pre><code>k3d node list</code></pre>
+        </li>
+        <li>
+            Teraz przystąpimy do uruchomienia w klastrze pierwszej bazy
+            danych Postgres. W pierwszym kroku pobierz plik manifestów za pomocą
+            poniższego polecenia:
+            <pre><code>wget www.cs.put.poznan.pl/jjezierski/RBDv3/rbd1.yaml</code></pre>
+        </li>
+        <li>
+            Otwórz plik manifestów w celu jego przeglądnięcia za pomocą
+            polecenia:
+            <pre><code>less rbd1.yaml</code></pre>
+            <p>Plik manifestów jest opisany za pomocą języka <a href="https://pl.wikipedia.org/wiki/YAML">YAML</a>.
+                Zwiera
+                on
+                deklarowany opis komponentów aplikacji wdrażanej w Kubernetes. W
+                uproszeniu, język YAML jest hierarchicznym zestawem par klucz-wartość
+                zwanych węzłami. Wartością może być skalar (tekst, liczba, wartość
+                logiczna), uporządkowana sekwencja węzłów lub nieuporządkowany zbiór
+                węzłów zwany mapą. Hierarchia węzłów jest wyznaczana przez wcięcia
+                wierszy, analogicznie jak w języku Python. Elementy sekwencji zaznacza
+                się znakiem myślnika. Plik rbd1.yaml zawiera 2 manifesty oddzielone
+                trzema myślnikami i rozpoczynające się od klucza <em>apiVersion</em>,
+                który określa wersję API Kubernetes wg której zastał zapisany
+                manifest.</p>
+            <p>Podstawową jednostką wdrożenia i skalowania składnika aplikacji w
+                Kubernetes jest <em>Pod</em>. Pod zawiera najczęściej jeden kontener. W
+                pojedynczym Pod można umieścić wiele kontenerów jeżeli współdzielą ten
+                sam zasób (np.: dysk), w takich sytuacjach często kontener
+                udostępniający główną usługę jest wspomagany przez inne kontenery, które
+                pełnią rolę pomocniczą, np.: stanowią adapter z innymi usługami lub
+                inicjują główny kontener. Istnieje możliwość bezpośredniego
+                zainstalowania Pod w klastrze, jednakże tak zainstalowany Pod nie jest
+                kontrolowany przez Control Plane i jest pozbawiony funkcji
+                automatycznego odtwarzania, skalowania oraz wersjonowanego
+                aktualizowania i wycofywania zmian. W celu wyposażenia Pod w wyżej
+                wymienione własności należy wdrożyć Pod za pomocą kontrolera. Kubernetes
+                oferuje 3 rodzaje kontrolerów: <em>Deployment</em>, <em>StatefulSet</em>
+                oraz <em>DeamonSet.</em> Pod wdrożony za pomocą <em>Deployment</em> jest
+                całkowicie bezstanowy. W wyniku jego aktualizacji, skalowania,
+                odtwarzania lub restartu Kubernetes może go fizycznie usunąć i utworzyć
+                jego nową instancję. Jest to podejście bardzo elastyczne zapewniające
+                dużą skalowalność i niezawodność, jednakże nie nadaje się dla składników
+                aplikacji, które posiadają własne dane zwłaszcza dla baz danych. Do
+                składowania danych istnieje możliwość zamontowania trwałego woluminu
+                (PersistentVolume) w Pod przez kontroler Deployment, jednakże wszystkie
+                repliki Poda współdzieliłyby ten wolumin co nie jest dozwolone dla baz
+                danych typu <em>share nothing</em>, którego przedstawicielem jest
+                Postgres. Kontroler <em>DeamonSet</em> uruchamia po jednej replice Pod
+                na każdym węźle klastra. Ten kontroler najczęściej jest wykorzystywany
+                dla usług kolekcjonujących dzienniki oraz monitorujących inne Pod.
+                Wszystkie Pod kontrolowane za pomocą DeamonSet również współdzielą ten
+                sam trwały wolumin i z tego powody ten rodzaj kontrolera nie jest
+                przydatny do naszych celów. Kontroler <em>StatefulSet</em> jest
+                przeznaczony do sterowania stanowymi Pod i z tego względu wykorzystuje
+                się go uruchamiania baz danych i z tego powodu wykorzystamy go w dalszej
+                części tutorialu.</p>
+            <p>Wracając do pliku manifestów. Pierwszy manifest opisuje Pod
+                kontrolowany za pomocą StatefulSet zawiera jeden kontener z obrazem
+                systemu Postgres. Klucz <em>kind</em> wskazuje na rodzaj użytego
+                kontrolera, w tym przypadku StatefulSet. Klucz <em>metadata.name</em>
+                został użyty do nazwania tego kontrolera jako pgsql-rbd1, nazwa ta musi
+                być poprawną nazwą DNS ponieważ wchodzi w skład nazw replik Pod, które
+                są rejestrowane w wewnętrznej usłudze klastra Kubernetes. Wszystkie
+                węzły występujące bezpośrednio pod kluczem <em>spec</em> odnoszą się do
+                specyfikacji kontrolera. Wartość klucza <em>spec.template</em> jest
+                szablonem replik Pod, który jest wykorzystywany przez kontroler do
+                tworzenia tych replik. W naszym przypadku szablon definiuje Pod
+                składający się z jednego kontenera o nazwie <em>pgsql-rbd1</em>, który
+                ma być utworzony z wykorzystaniem obrazu z repozytorium Docker o nazwie
+                postgres:17.6. Każdy kontener ma zamontować trwały wolumin, którego
+                nazwa rozpoczyna się od frazy <em>pgsql-rbd1-disk</em> w katalogu
+                <em>/data</em>. Definicje szablonów woluminów opisane są za pomocą
+                klucza volumeClaimTemplates, który umożliwia utworzenie woluminu dla
+                każdej repliki Pod. Klucz volumeClaimTemplates.spec określa między
+                innymi tryb dostępu do woluminu oraz jego rozmiar. Klucz <em>env</em>
+                umożliwia przekazanie do kontenera wartości zmiennych środowiskowych,
+                które są zazwyczaj wykorzystywane przez kontener do swojej
+                inicjalizacji. W naszym przypadku przekazano wartości zmiennych, które
+                określają hasło użytkownika <em>postgres</em> oraz lokalizację katalogu
+                zawierającego konfigurację i dane bazy danych. Zauważ, że katalog ten
+                znajduje się na zamontowanym trwałym woluminie. Klucz
+                <em>template.spec.node.selector</em> umożliwia określenie kryterium
+                wyboru węzłów klastra, na których mają zostać uruchomione repliki
+                <em>Pod</em>. W naszym przypadku posłużymy się nazwą hosta, aby
+                uruchomić Pod na węźle k3d-rbdcluster-agent-0. Przypisanie Pod do węzłów
+                klastra jest opcjonalne, rozpraszanie replik Pod w celu równoważenia
+                obciążenia jest automatyczne.
+            </p>
+
+            <p>Klucz spec.replicas wskazuje na liczbę żądanych replik Pod. W naszym
+                przypadku wykorzystamy jedną replikę. Klucz spec.selector jest listą
+                etykiet, którą muszą posiadać Pod aby kontroler mógł nimi zarządzać.
+                Zauważ, że wartość klucza <em>spec.selector.matchLabels</em> (app:
+                pgsql-rbd1) pasuje do wartości klucza
+                <em>spec.template.metadata.labels</em>.
+            </p>
+
+            <p>Repliki Pod, które zastaną utworzone przez kontroler mają dynamiczne
+                adresy IP, które mogą się zmieniać przy skalowaniu lub odtwarzaniu Pod,
+                dodatkowo adresy te działają w wewnętrznej sieci klastra. Z tego powodu
+                trzeba utworzyć dodatkową usługę, która będzie miała stałe zewnętrzne IP
+                za pośrednictwem której będzie można komunikować się z replikami Pod. W
+                tym celu można wykorzystać <em>LoadBalancer</em>. Zadaniem tej usługi
+                jest przekierowywanie połączeń do replik Pod w taki sposób aby
+                równoważyć ich obciążenie.
+                Drugi manifest w pliku manifestów opisuje usługę
+                <em>LoadBalancer</em>. Wartość klucza <em>kind</em> wskazuje, że
+                manifest dotyczy usługi. Klucz <em>metadata.name</em> umożliwia nazwanie
+                usługi. Węzeł <em>spec</em> określa specyfikację usługi. Klucz
+                <em>spec.type</em> umożliwia wskazanie, że nasza usługa ma być typu
+                <em>LoadBalancer</em>. Klucz <em>spec.ports</em> specyfikuje
+                odwzorowanie portów, w naszym przypadku port 5432, na którym nasłuchuje
+                baza danych Postgres uruchomiona w replikach Pod ma być odwzorowana w
+                ten sam port adresów usługi <em>LoadBalancer</em>. Klucz
+                <em>spec.selector</em> wskazuje etykiety Pod, dla których usługa
+                <em>LoadBalancer</em> będzie wykonywać swoje zadanie.
+            </p>
+
+            <p>Opuść program <em>less</em> wybierając przycisk <em>q</em>.</p>
+        </li>
+        <li>
+            Standardowy obraz systemu Postgres nie zawiera jego rozszerzenia
+            o nazwie pg_fdw_plus, które będzie potrzebne w dalszej części zajęć.
+            Wydawałoby się, że można je zainstalować w działającym już kontenerze.
+            Jednakże zmiany wykonane w plikach kontenera poza katalogami, w których
+            są zamontowane trwałe woluminy są ulotne. Restart, skalowanie lub
+            odtwarzanie Pod powoduje utratę zmian, które zostały wprowadzone do
+            systemu plikowego kontenera przez instalator. Z tego powodu w pliku
+            manifestu znajduje się referencja do obrazu nazwie rbd/postgres17:1.0,
+            który przygotujemy w taki sposób, że będzie zawierał potrzebne nam
+            rozszerzenia.
+        </li>
+        <li>
+            Pobierz plik <em>dockerfile</em> opisujący sposób konstrukcji
+            obrazu rbd/postgres17:1.0 za pomocą poniższego polecenia:
+            <pre><code>wget http://www.cs.put.poznan.pl/jjezierski/RBDv3/pg_fdw_plus.dockerfile</code></pre>
+        </li>
+        <li>
+            Przeglądnij ten plik wykorzystując poniższe polecenie:
+            <pre><code>less pg_fdw_plus.dockerfile</code></pre>
+            Pierwsza dyrektywa FROM wskazuje obraz roboczy, w którym zostanie
+            wykonana budowa binariów rozszerzenia pg_fdw_plus. Pierwsza dyrektywa
+            RUN uruchamia sekwencję poleceń, które przygotowuje środowisko obrazu
+            roboczego do budowania rozszerzenia. Druga dyrektywa RUN pobiera źródła
+            rozszerzenia i buduje binaria rozszerzenia. Druga dyrektywa FROM
+            wskazuje na źródłowy obraz, który wykorzystamy jako bazę dla naszego
+            obrazu. Kolejne trzy dyrektywy COPY kopiują binaria rozszerzenia z
+            obrazu roboczego do obrazu docelowego. Można byłoby zrezygnować z obrazu
+            roboczego i wykonać budowanie rozszerzenia bezpośrednio w obrazie
+            docelowym. Jednakże w takim przypadku obraz docelowy zawierałby
+            środowisko deweloperskie co niepotrzebnie zwiększałoby rozmiar
+            obraz.
+            Opuść program <em>less</em> wybierając przycisk <em>q</em>.
+        </li>
+        <li>
+            Utwórz wersję 1.0 obrazu wykonując polecenie:
+            <pre><code>docker build -t rbd/postgres17:1.0 - < pg_fdw_plus.dockerfile</code></pre>
+            Przełącznik <em>t</em> polecenia <em>docker build</em> służy do
+            wskazania nazwy i wersji naszego obrazu.
+        </li>
+        <li>
+            Utworzony obraz jest dostępny jedynie lokalnie. W celu
+            zaimportowania go do klastra wykonaj poniższe polecenie:
+            <pre><code>k3d image import rbd/postgres17:1.0 --cluster RBDcluster</code></pre>
+        </li>
+
+        <li>
+            Rozpocznij wdrożenie komponentów z pliku manifestów za pomocą
+            polecenia:
+            <pre><code>kubectl apply -f rbd1.yaml</code></pre>
+        </li>
+        <li>
+            Obserwuj postęp wdrożenia <em>StatefulSet</em> wykorzystując
+            poniższe polecenie:
+            <pre><code>kubectl get sts --watch</code></pre>
+            Wdrożenie wymaga pobranie obrazu kontenera z repozytorium Docker w
+            związku z tym zajmuje chwilę. Wdrożenie zakończy w momencie pojawienia
+            się na terminalu wiersza, w którym liczba działających replik będzie
+            równa liczbie żądanych replik, np.:<br />
+            <blockquote><code>pgsql-rbd1 <mark>1</mark>/1 1m</code></blockquote>
+            W tym momencie przerwij wykonanie polecenia wykorzystując kombinację
+            Ctrl-c.
+        </li>
+        <li>
+            Teraz przygotujemy drugą bazę danych. Skopiuj plik manifestów do
+            pliku rbd2.yaml:
+            <pre><code>cp rbd1.yaml rbd2.yaml</code></pre>
+        </li>
+        <li>
+            Użyj swojego ulubionego edytora tekstu wykonać następujące zmiany
+            w pliku rbd2.yaml <mark>[Raport]</mark>:
+            <ul>
+                <li>
+                    zamień wszystkie wystąpienia tekstu rbd1 na rbd2,
+                </li>
+                <li>
+                    zamień nazwę hosta k3d-rbdcluster-agent-0 na
+                    k3d-rbdcluster-agent-1,
+                </li>
+                <li>
+                    ustal w drugim manifeście wartość klucza spec.ports.port na
+                    5433.
+                </li>
+            </ul>
+        </li>
+        <li>
+            Wykonaj wdrożenie zawartości pliku rbd2.yaml <mark>[Raport]</mark>.
+        </li>
+        <li>
+            Zainstaluj klienta Postgres wykonując następujące
+            polecenia:
+            <pre><code>sudo apt-get -y install postgresql-client=17+278</code></pre>
+        </li>
+        <li>
+            Otwórz dwa kolejne okna lub zakładki terminala, w pierwszym ustaw
+            znak zachęty za pomocą polecenia export <code>PS1='[\u@rbd1 \W]$ '</code>. W drugim
+            terminalu ustaw znak zachęty za pomocą polecenia
+            <code> export PS1='[\u@rbd2\W]$ '</code>. Pierwszy terminal o nazwie <em>rbd1</em> będzie służył do
+            operowania na bazie danych <em>RBD1</em>, natomiast drugi terminal o
+            nazwie <em>rbd2</em> będzie wykorzystywany do wykonywania operacji na
+            bazie danych <em>RBD2</em>.
+        </li>
+    </ol>
+    <h2 id="transparentny-dostęp-do-zdalnych-danych">Transparentny dostęp do
+        zdalnych danych</h2>
+    Celem tego punktu jest zaprezentowanie mechanizmów zdalnego serwera,
+    odwzorowania użytkownika oraz importowania schematu, które umożliwiają
+    transparenty dostęp do rozproszonych danych. Mechanizmy te są
+    implementacją standardu ISO/IEC 9075-9 (SQL/MED).
+    <ol>
+        <li>
+            W terminalu <em>rbd1</em> uruchom narzędzie <em>psql</em> logując
+            się jako użytkownik <em>postgres</em> do bazy danych <em>RBD1</em>.
+            Wykorzystaj polecenie
+            <pre><code>psql -U postgres -h localhost -p 5432 postgres</code></pre>
+            Użyj hasła rbd1 w celu uwierzytelnienia użytkownika postgres.
+            <p>
+                <strong>Uwaga</strong>: jeżeli narzędzie psql nieoczekiwanie traci
+                połączenie ze serwerem zamiast adresu localhost użyj jednego z adresów
+                węzła loadbalancer. W celu pozyskania tych adresów użyj polecenia:
+                kubectl get svc. Wykorzystaj jeden z adresów z
+                kolumny EXTERNAL-IP.
+            </p>
+        </li>
+        <li>
+            W narzędziu <em>psql</em> ustaw znak zachęty dla pierwszego
+            wiersza komendy za pomocą polecenia <code>\set PROMPT1 '%n@RBD1:%>%# '</code>.
+        </li>
+        <li>
+            W terminalu <em>rbd2</em> uruchom narzędzie <em>psql</em> logując
+            się do bazy danych <em>RBD2</em>. Zwróć uwagę na podanie odpowiedniego
+            numeru portu. W narzędziu <em>psql</em> ustaw odpowiedni znak
+            zachęty.
+        </li>
+        <li>
+            W terminalu <em>rbd1</em> za pomocą narzędzia <em>psql</em>
+            zainstaluj w bazie danych <em>RBD1</em> rozszerzenie <a
+                href="https://github.com/pgfdwplus/postgres_fdw_plus">postgres_fdw_plus</a>,
+            które jest forkiem rozszerzenia <a
+                href="https://www.postgresql.org/docs/current/static/postgres-fdw.html">postgres_fdw</a>
+            wykonując polecenie CREATE EXTENSION postgres_fdw_plus;.
+        </li>
+        <li>
+            W terminalu <em>rbd2</em> w bazie danych <em>RBD2</em> również
+            zainstaluj rozszerzenie postgres_fdw_plus.
+        </li>
+        <li>
+            Pobierz skrypty SQL wykonując w terminalu pomocniczym
+            polecenia:
+            <pre><code>wget www.cs.put.poznan.pl/jjezierski/RBDv3/pracownicy.sql
+                wget www.cs.put.poznan.pl/jjezierski/RBDv3/zespoly.sql
+            </code></pre>
+        </li>
+        <li>
+            W bazie danych <em>RBD1</em> utwórz tabelę <em>pracownicy</em>
+            uruchamiając skrypt w narzędziu <em>psql</em> poleceniem <code>\i ~/pracownicy.sql</code>.
+        </li>
+        <li>
+            W bazie danych <em>RBD2</em> utwórz tabelę <em>zespoly</em>
+            uruchamiając skrypt <code>\i ~/zespoly.sql</code>.
+        </li>
+        <li>
+            Utwórz w bazie danych <em>RBD1</em> definicję <a
+                href="https://www.postgresql.org/docs/current/static/sql-createserver.html">zdalnego
+                serwera</a> <em>rbd2</em> za pomocą poniższego polecenia:
+            <pre><code>CREATE SERVER rbd2
+FOREIGN DATA WRAPPER postgres_fdw
+OPTIONS (host 'pgsql-rbd2-lb', port '5433', dbname 'postgres');
+</code></pre>
+        </li>
+        <li>
+            Utwórz w bazie danych <em>RBD1</em> <a
+                href="https://www.postgresql.org/docs/current/static/sql-createusermapping.html">odwzorowanie
+                zdalnego użytkownika</a> <em>postgres</em> serwera <em>rbd2</em>,
+            wykorzystaj poniższe polecenie:<br />
+            <pre><code>CREATE USER MAPPING FOR postgres SERVER rbd2
+OPTIONS (user 'postgres', password 'rbd2');
+</code></pre>
+        </li>
+        <li>
+            <a href="https://www.postgresql.org/docs/current/static/sql-importforeignschema.html">Zaimportuj</a>
+            do bazy danych <em>RBD1</em> fragment schematu <em>public</em>
+            zawierający tabelę <em>zespoly</em> udostępniany przez serwer
+            <em>rbd2</em>, wykorzystaj poniższe polecenie:
+
+            <pre><code>IMPORT FOREIGN SCHEMA public LIMIT TO (zespoly)
+FROM SERVER rbd2 INTO public;</code></pre>
+        </li>
+        <li>
+            W terminalu <em>rbd1</em> wykonaj poniższe polecenia testujące
+            zdalny dostęp do tabeli <em>zespoly</em>:
+            <pre><code>SELECT * FROM zespoly;
+SELECT nazwisko, nazwa FROM pracownicy natural join zespoly;
+</code></pre>
+        </li>
+        <li>
+            Utwórz w bazie danych RBD2 odpowiednie obiekty umożliwiające
+            zdalny dostęp do tabeli pracownicy znajdującej się w bazie danych RBD1.
+            <mark>[Raport]</mark>
+        </li>
+    </ol>
+    <h2 id="rozproszone-transakcje">Rozproszone transakcje</h2>
+    Celem zadania jest przedstawienie rozproszonych transakcji, czyli
+    takich transakcji, które modyfikują dane w więcej niż w jednej bazie
+    danych. Istotnym problem do rozwiązania przez producentów rozproszonych
+    systemów baz danych jest zapewnienie atomowości zatwierdzenia zmian
+    wprowadzonych do różnych węzłów rozproszonej bazy danych. Problem ten
+    rozwiązuje się wykorzystując wielofazowe algorytmy zatwierdzenia
+    transakcji. Najpopularniejszym algorytmem jest algorytm dwufazowy o
+    nazwie Two Phase Commit (2PC). Zapoznaj się z <a href="https://en.wikipedia.org/wiki/Two-phase_commit_protocol">tym
+        artykułem</a> opisującym protokół 2PC. Rozszerzenie postgres_fdw_plus
+    wspiera ten protokół po odpowiedniej konfiguracji systemu.
+
+    <h3 id="przygotowanie-systemu-do-realizacji-rozproszonych-transakcji">Przygotowanie
+        systemu do realizacji rozproszonych transakcji</h3>
+    <ol>
+        <li>
+            W terminalu <em>rbd1</em> w narzędziu <em>psql</em> zmień w pliku
+            konfiguracyjnym bazy danych rbd1 wartość parametru
+            max_prepared_transactions na wartość 10. Parametr ten określa liczbę
+            lokalnych transakcji, które mogą uczestniczyć w globalnej (rozproszonej)
+            transakcji. Wykorzystaj w tym celu poniższe polecenie:
+            <pre><code>ALTER SYSTEM set max_prepared_transactions = 10;</code></pre>
+        </li>
+        <li>
+            W terminalu <em>rbd1</em> w narzędziu <em>psql</em> zmień w pliku
+            konfiguracyjnym bazy danych rbd1 wartość parametru
+            postgres_fdw.two_phase_commit na wartość on. Parametr ten włącza obsługę
+            protokołu 2PC dla globalnych transakcji realizowanych na zdalnych
+            obiektach udostępnianych przez rozszerzenie pg_fwd_plus na poziomie
+            wszystkich sesji system. Działanie tego parametru można ograniczyć do
+            bieżącej sesji użytkownika, jeżeli ustawi się go za pomocą polecenia
+            SET. Wykorzystaj w tym celu poniższe polecenie:
+            <pre><code>ALTER SYSTEM set postgres_fdw.two_phase_commit = on;</code></pre>
+        </li>
+        <li>
+            W celach diagnostycznych włącz rejestrowanie wszystkich
+            realizowanych przez Postgres poleceń SQL w pliku dziennika. W tym celu w
+            terminalu <em>rbd1</em> w narzędziu <em>psql</em> wykonaj poniższe
+            polecenia:
+            <pre><code>ALTER SYSTEM set log_statement = 'all';
+ALTER SYSTEM set log_min_duration_statement = 0;
+</code></pre>
+        </li>
+        <li>
+            Zastosuj wprowadzone zmiany w pliku konfiguracyjnym bazy danych
+            <em>rbd1</em> przez wykonanie w terminalu pomocniczym następującego
+            polecenia:
+            <pre><code>kubectl rollout restart sts pgsql-rbd1</code></pre>
+        </li>
+        <li>
+            Powtórz powyższe polecenia w bazie <em>rbd2</em>.
+        </li>
+    </ol>
+    <h3 id="rozproszona-transakcja-zakończona-sukcesem">Rozproszona
+        transakcja zakończona sukcesem</h3>
+    <ol>
+        <li>
+            Otwórz kolejną zakładkę terminala i nazwij ją <em>diag-rbd1</em>.
+            Uruchom w niej poniższe polecenie aby wyświetlać informacje
+            diagnostyczne bazy danych <em>rdb1</em>:
+            <pre><code>kubectl logs -f pgsql-rbd1-0</code></pre>
+        </li>
+        <li>
+            Powtórz poprzedni krok dla bazy danych <em>rbd2</em>.
+        </li>
+        <li>
+            W terminalu <em>rbd1</em> za pomocą narzędzia <em>psql</em>
+            wykonaj w bazie danych RBD1 poniższą transakcję rozproszoną:
+            <pre><code>begin;
+update zespoly set adres='PIOTROWO 1' where id_zesp=10;
+update pracownicy set placa_pod=999 where id_prac=100;
+commit;
+</code></pre>
+        </li>
+        <li>
+            Sprawdź w terminalu <em>rbd2</em> stan tabel <em>pracownicy</em>
+            i <em>zespoly</em>. Czy posiadają one zmiany wprowadzone przez
+            transakcję z poprzedniego punkty? <mark>[Raport]</mark>
+        </li>
+        <li>
+            Sprawdź zawartość terminala <em>diag-rbd1</em>. W informacjach
+            diagnostycznych powinny być wyświetlone informacje o wszystkich czterech
+            poleceniach zleconych w ramach transakcji z poprzedniego
+            punktu.
+        </li>
+        <li>
+            Sprawdź zawartość terminala <em>diag-rbd2</em>. W informacjach
+            diagnostycznych powinny być wyświetlone między innymi poniższe
+            informacje:<br />
+            <blockquote>
+                <pre><code>START TRANSACTION ISOLATION LEVEL READ COMMITTED
+parse &lt;unnamed&gt;: UPDATE public.zespoly ...
+bind &lt;unnamed&gt;: UPDATE public.zespoly ...
+execute &lt;unnamed&gt;: UPDATE public.zespoly ...
+PREPARE TRANSACTION 'pgfdw_803_16437_84_null'
+COMMIT PREPARED 'pgfdw_803_16437_84_null'
+</code></pre>
+            </blockquote>
+            <p>
+                Powyższe informacje są śladem wykonania poleceń lokalnej transakcji
+                realizowanej w bazie danych <em>rdb2</em>. Pierwsze polecenie rozpoczyna
+                lokalną transakcję w trybie izolacji <em>read committed</em>. Kolejne 3
+                operacje reprezentują trzy fazy wykonania polecenia UPDATE na tabeli
+                <em>zespoly</em>. Kolejne 2 polecenia są kluczowe z punktu widzenia
+                realizacji protokołu 2PC. Polecenie PREPARE TRANSACTION przygotowuje
+                lokalną transakcję bazy danych <em>rbd2</em> do zatwierdzenia. Polecenie
+                COMMIT PREPARED zatwierdza wcześniej przygotowaną transakcję.
+            </p>
+
+            <p>
+                Zauważ, globalna rozproszona transakcja uruchomiona w bazie danych
+                <em>rbd1</em> nie spowodowała wykonania poleceń PREPARE TRANSACTION i
+                COMMIT PREPARED w bazie danych <em>rbd1</em>. Z tego wynika, że baza
+                danych <em>rbd1</em> nie weszła w stan PREPARED. Jest to typowe dla
+                wariantu algorytmu 2PC, w którym jedna z baz danych nazywana węzłem
+                zatwierdzania zachowuje się w ten sposób.
+            </p>
+
+            <p>
+                W powyższym scenariuszu transakcji baza danych <em>rbd1</em> pełni
+                rolę zarówno koordynatora jak i węzła zatwierdzania. Po odebraniu
+                polecenia COMMIT zatwierdzającego globalną transakcję baza danych
+                <em>rbd1</em> wysyła do bazy danych <em>rbd2</em> polecenie PREPARE
+                TRANSACTION. Jeżeli <em>rbd1</em> odbierze od <em>rbd2</em>
+                potwierdzenie wykonania operacji, to zatwierdza swoją transakcję i
+                następnie wysyła do <em>rbd2</em> polecenie COMMIT PREPARED. W ten
+                sposób globalna rozproszona transakcja kończy się sukcesem.
+            </p>
+        </li>
+
+    </ol>
+    <h3 id="rozproszona-transakcja-zakończona-awarią-przed-fazą-prepare">Rozproszona
+        transakcja zakończona awarią przed fazą PREPARE</h3>
+    Teraz zakłócimy pomyślną ścieżkę protokołu 2PC przez restart bazy
+    danych <em>rdb2</em> przed wykonaniem polecenia COMMIT w bazie
+    <em>rbd1</em> i sprawdzimy zachowanie obu baz danych.
+
+    <ol>
+        <li>
+            W terminalu <em>rbd1</em> za pomocą narzędzia <em>psql</em>
+            wykonaj w bazie danych RBD1 rozpocznij transakcję rozproszoną:
+        </li>
+<pre><code>begin;
+update zespoly set adres='PIOTROWO 3' where id_zesp=10;
+update pracownicy set placa_pod=888 where id_prac=100;
+</code></pre>
+        <li>
+            Otwórz nowe okno terminala, które dalej będzie nazywane
+            pomocniczym. Zrestartuj Pod pgsql-rbd2, w tym celu wykonaj w terminalu
+            pomocniczym poniższe polecenie:
+            <pre><code>kubectl rollout restart sts pgsql-rbd2</code></pre>
+        </li>
+        <li>
+            Spróbuj zatwierdzić globalną transakcję wydając w terminalu
+            <em>rbd1</em> polecenie:<br />
+            <pre><code>commit;</code></pre>
+        </li>
+        Uzyskasz informację o błędzie:
+        <blockquote><code>ERROR: FATAL: terminating connection due to administrator command</code></blockquote>
+        W terminalu diag-rbd1 znajdziesz rozszerzoną informację:
+<blockquote><pre><code>ERROR: FATAL: terminating connection due to administrator command
+CONTEXT: remote SQL command: PREPARE TRANSACTION ...
+</code></pre>
+</blockquote>
+        Błąd pojawił się przy próbie wykonania zdalnej operacji PREPARE
+        TRANSACTION na bazie danych <em>rbd2</em>.
+        <li>
+            W terminalu <em>rbd1</em> sprawdź identyfikator bieżącej
+            transakcji wykonując polecenie:
+        <pre><code>SELECT txid_current_if_assigned();</code></pre>
+        Zapewne dostałeś wartość pustą co oznacza, że twoja sesja nie ma
+        aktywnej transakcji.
+        W takim razie co się stało z twoją transakcją? Trwa nadal, została
+        zatwierdzona czy wycofana?
+        Sprawdź stan modyfikowanego wiersza tabeli <em>pracownicy</em>
+        wydając polecenie:
+        <pre><code>select placa_pod from pracownicy where id_prac=100 for update nowait;</code></pre>
+        Okazuje się, że płaca nie została zmieniona.
+        Polecenie to nie tylko odczytuje dane ale użycie klauzuli FOR UPDATE
+        NOWAIT również blokuje odczytywany wiersz w trybie wyłącznym. W związku
+        z tym, że polecenie to zostało wydane poza zakresem transakcji to
+        założona blokada została po wykonaniu polecenia natychmiast zwolniona.
+        Jeżeli jakaś transakcja blokowałaby odczytywany wiersz, to polecenie
+        SELECT zakończyłoby się błędem. W związku z tym, że odczyt został
+        wykonany poprawnie i płaca nie została zmieniona może wnioskować, że
+        lokalna transakcja w bazie danych <em>rbd1</em> została wycofana.
+        Teraz sprawdzimy co się stało z lokalną transakcją w bazie danych
+        <em>rbd2.</em>
+        </li>
+
+        <li>
+            W terminalu diag-rbd2 zrestartuj poniższe polecenie, które
+            zostało przerwane z powodu restartu Poda:
+            <pre><code>kubectl logs -f pgsql-rbd2-0</code></pre>
+            W terminalu zobaczysz podobne wpisy do poniższych:
+            LOG: received fast shutdown request
+            LOG: aborting any active transactions
+            Wpisy wskazują, że wszystkie aktywne transakcje, w tym lokalna
+            transakcja na bazie <em>rdb2</em> wchodząca w skład testowanej globalnej
+            transakcji, zostały wycofane.
+        </li>
+        <li>
+            Wykonamy jeszcze jedno sprawdzenie, podobne jak w przypadku bazy
+            danych <em>rbd1</em>. W terminalu <em>rbd2</em> w narzędziu
+            <em>psql</em> nawiąż ponownie połączenie do bazy danych <em>RBD2</em> za
+            pomocą polecenia: 
+            <pre><code>\c postgres postgres localhost 5433</code></pre>
+
+        </li>
+        <li>
+            W terminalu <em>rbd2</em> wykonaj poniższe polecenie:
+            <pre><code>select adres from zespoly where id_zesp=10 for update nowait;</code></pre>
+            <p>
+                Polecenie wykonało się poprawnie i adres zespołu nie zmienił się, co
+                potwierdza, że lokalna transakcja na bazie danych <em>rbd2</em> została
+                wycofana.
+            </p>
+            <p>
+                Ustaliliśmy, że zmiany w bazie danych <em>rbd1</em> i <em>rbd2</em>
+                zostały wycofane co oznacza, że cała globalna transakcja została
+                wycofana. W ten sposób potwierdziliśmy, że implementacja protokołu 2PC
+                wykonana w rozszerzeniu pg_fwd_plus działa poprawnie w przetestowanym
+                scenariuszu awarii.
+            </p>
+        </li>
+        <li>
+            Przetestuj analogiczny scenariusz awarii, w którym zasymulujesz
+            awarię bazy danych <em>rbd1</em> przed fazą PREPARE. <mark>[Raport]</mark>
+        </li>
+    </ol>
+    <h3 id="rozproszona-transakcja-zakończona-awarią-po-fazie-prepare">Rozproszona
+        transakcja zakończona awarią po fazie PREPARE</h3>
+    Teraz zakłócimy pomyślną ścieżkę protokołu 2PC po wykonaniu polecenia
+    PREPARE TRANSACTION w bazie <em>rbd2</em> i sprawdzimy zachowanie obu
+    baz danych.
+    <ol>
+        <li>
+            Do zakłócenia zatwierdzenia globalnej transakcji wykorzystamy
+            parametr <em>skip_commit_phase</em> rozszerzenia
+            <em>postgres_fdw_plus</em>. Ustawienie tego parametru na wartość
+            <em>true</em> spowoduje, że przy wykonaniu polecenia COMMIT globalnej
+            transakcji do zdalnych baz danych jest wysyłane PREPARE TRANSACTION,
+            następnie lokalna transakcja w węźle zatwierdzania jest zatwierdzana ale
+            do zdalnych baz danych nie jest wysyłane polecenie COMMIT PREPARED.
+            Parametr ten umożliwia zasymulowanie awarii zdalnych baz danych po
+            wykonaniu polecenia PREPARE TRANSACTION ale przed wykonaniem COMMIT
+            PREPARED. W terminalu <em>rbd1</em> za pomocą narzędzia <em>psql</em>
+            wykonaj następujące polecenie:
+
+            <pre><code>set postgres_fdw.skip_commit_phase=true;</code></pre>
+        </li>
+        <li>
+            W terminalu <em>rbd1</em> za pomocą narzędzia <em>psql</em>
+            wykonaj w bazie danych RBD1 wykonaj transakcję rozproszoną:
+<pre><code>begin;
+update zespoly set adres='PIOTROWO 3' where id_zesp=10;
+update pracownicy set placa_pod=888 where id_prac=100;
+commit;
+</code></pre>
+        </li>
+        <li>
+            W terminalu <em>rbd1</em> sprawdź stan modyfikowanego wiersza
+            tabeli <em>pracownicy</em> wydając polecenie:
+            <pre><code>select placa_pod from pracownicy where id_prac=100 for update nowait;</code></pre>
+            Okazuje się, że zmiany płacy pracownika zostały wprowadzone do bazy
+            danych <em>rbd1</em> i zatwierdzone. Z tego wynika, że lokalna
+            transakcja realizowana w tej bazie danych została zatwierdzona.
+            Teraz sprawdzimy co się stało z lokalną transakcją w bazie danych
+            <em>rbd2.</em>
+        </li>
+
+        <li>
+            Przeglądnij wpisy w terminalu diag-rbd2. Wpisy wskazują, że
+            zostało wykonane polecenie PREPARE TRANSACTION ale nie zostało wykonane
+            polecenie COMMIT PREPARED.
+        </li>
+        <li>
+            Wykonamy jeszcze jedno sprawdzenie, podobne jak w przypadku bazy
+            danych <em>rbd1</em>. W terminalu <em>rbd2</em> w narzędziu
+            <em>psql</em> nawiąż ponownie połączenie do bazy danych <em>RBD2</em> za
+            pomocą polecenia: 
+            <pre><code>\c postgres postgres localhost 5433</code></pre>
+
+        </li>
+        <li>
+            Sprawdź jaki status ma modyfikowany wiersz tabeli
+            <em>zespoly</em>, w tym celu w terminalu <em>rbd2</em> wykonaj poniższe
+            polecenie:
+            <pre><code>select adres from zespoly where id_zesp=10 for update nowait;</code></pre>
+            Polecenie zakończyło się błędem, co oznacza, że lokalna transakcja
+            nie została zakończona.
+</li>
+        <li>
+            W terminalu <em>rbd2</em> wykonaj poniższe polecenie aby
+            wyświetlić informacje o transakcjach bazy danych <em>rbd2</em>, które
+            znajdują się w stanie PREPARE:
+            <pre><code>select * from pg_prepared_xacts;</code></pre>
+            Z resultatu powyższego zapytania wynika, że lokalna transakcja bazy
+            danych <em>rdb2</em> znajduje się w stanie PREPARED.
+        </li>
+        <li>
+            W celu zwiększenia realizmu scenariusza awarii zasymuluj awarię
+            bazę danych przez restart jej Poda, w tym celu w terminalu pomocniczym
+            wykonaj polecenie:
+            <pre><code>kubectl rollout restart sts pgsql-rbd2</code></pre>
+        </li>
+        <li>
+            W terminalu diag-rbd2 zrestartuj poniższe polecenie, które
+            zostało przerwane z powodu restartu Poda:
+            <pre><code>kubectl logs -f pgsql-rbd1-0</code></pre>
+            W terminalu zobaczysz między innymi wpis:
+            LOG: recovering prepared transaction … from shared memory
+            Wpis ten oznacza, że lokalna transakcja bazy danych <em>rbd2</em>
+            znajdująca się w stanie PRAPARED została odzyskana.
+        </li>
+        <li>
+            W terminalu <em>rbd2</em> w narzędziu <em>psql</em> nawiąż
+            ponownie połączenie do bazy danych <em>RBD2</em> za pomocą polecenia: 
+            <pre><code>\c postgres postgres localhost 5433</code></pre>
+        </li>
+        <li>
+            W terminalu <em>rbd2</em> ponownie sprawdź status wiersza tabeli
+            <em>zespoly</em> wykorzystując polecenie SELECT … FOR UPDATE NOWAIT.
+            Sprawdź też zawartość tabeli <em>pg_prepared_xacts</em>. Okazuje się, że
+            restart bazy danych symulujący jej awarię nic nie zmienił: modyfikowany
+            wiersz jest zablokowany przez odtworzoną lokalną transakcję i ta
+            transakcja jest cały czas w stanie PREAPARED.
+        </li>
+        <li>
+            Wiemy, że lokalna transakcja w bazie danych <em>rbd1</em>, czyli
+            w węźle zatwierdzenia została zatwierdzona. W celu zachowania atomowości
+            globalnej transakcji, lokalna transakcja w bazie danych <em>rbd2</em>
+            również powinna zostać zatwierdzona. Możemy to zrobić przez wykonanie
+            polecenia COMMIT ROLLBACK <em>gid</em>, gdzie <em>gid</em> to
+            identyfikator pozyskany z kolumny o tej samej nazwie z tabeli
+            <em>pg_prepared_xacts</em>. Alternatywnie można skorzystać z funkcji
+            <em>pgfdw_plus_resolve_foreign_prepared_xacts</em> dostarczanej przez
+            rozszerzenie <em>postgres_fdw_plus</em>. Funkcja ta korzysta z tabeli
+            <em>pgfdw_plus.xact_commits</em>, w której koordynator (czyli w naszym
+            przypadku baza danych <em>rbd1</em>) składuje identyfikatory lokalnych
+            transakcji. Funkcja wymaga rozszerzenia <em>dblink</em>, w celu jego
+            zainstalowania wykonaj w terminalu <em>rbd1</em> poniższe
+            polecenie:
+
+            <pre><code>create extension dblink;</code></pre>
+        </li>
+        <li>
+            Wykorzystaj funkcję
+            <em>pgfdw_plus_resolve_foreign_prepared_xacts</em> do zakończenia
+            globalnej transakcji, w tym celu wykonaj w terminalu <em>rbd1</em>
+            poniższe polecenie:
+
+<pre><code>SELECT * FROM pgfdw_plus_resolve_foreign_prepared_xacts('rbd2', false);
+</code></pre>
+            W terminalu <em>rbd2</em> ponownie sprawdź status wiersza tabeli
+            <em>zespoly</em> wykorzystując polecenie SELECT … FOR UPDATE NOWAIT.
+            Polecenie wykonało się poprawnie i adres zespołu zmienił się, co
+            potwierdza, że lokalna transakcja w bazie danych <em>rbd2</em> została
+            zatwierdzona. Sprawdź też zawartość tabeli <em>pg_prepared_xacts</em>. W
+            bazie danych <em>rbd2</em> nie ma już żadnych transakcji w stanie
+            PREPARED. Ustaliliśmy, że zmiany w bazie danych <em>rbd1</em> i
+            <em>rbd2</em> zostały zatwierdzone co oznacza, że cała globalna
+            transakcja została zatwierdzona. W ten sposób potwierdziliśmy, że
+            implementacja protokołu 2PC wykonana w rozszerzeniu pg_fwd_plus działa
+            poprawnie w przetestowanym scenariuszu awarii.
+        </li>
+
+    </ol>
+    <h2 id="rozproszone-zakleszczenie">Rozproszone zakleszczenie</h2>
+    System Postgresql, jak praktycznie wszystkie systemy zarządzania
+    bazami danych, do synchronizacji transakcji wykorzystuje blokady
+    transakcyjne. Celem ćwiczenia jest sprawdzenie w jaki sposób system ten
+    radzi sobie z rozproszonym zakleszczeniem.
+    <ol>
+        <li>
+            W bazie danych <em>RBD1</em> rozpocznij rozproszoną transakcję T1
+            za pomocą poniższych poleceń SQL:
+<Pre><code>begin;
+update pracownicy set placa_pod=placa_pod+10 where id_prac=100;
+</code></Pre>
+        </li>
+        <li>
+            W bazie danych <em>RBD2</em> rozpocznij rozproszoną transakcję T2
+            za pomocą poniższych poleceń SQL:
+<pre><code>begin;
+update zespoly set adres='PIOTROWO 88' where id_zesp=10;
+</code></pre>
+        </li>
+        <li>
+            W bazie danych <em>RBD1</em> kontynuuj rozproszoną transakcję T1
+            za pomocą poniższego polecenia SQL:
+            <pre><code>update zespoly set adres='PIOTROWO 77' where id_zesp=10;</code></pre>
+        </li>
+        <li>
+            W bazie danych <em>RBD2</em> kontynuuj rozproszoną transakcję T2
+            za pomocą poniższego polecenia SQL:
+            <pre><code>update pracownicy set placa_pod=placa_pod+10 where id_prac=100;</code></pre>
+        </li>
+        <li>
+            Co się stało? Poczekaj jeszcze 1 minutę. Coś się
+            zmieniło?
+        </li>
+        <li>
+            Niestety system Postgresql nie wykrywa rozproszonych
+            zakleszczeń.
+        </li>
+        <li>
+            W terminalu <em>rbd2</em> za pomocą klawiszy Ctr-C przerwij
+            oczekiwanie na blokadę.
+        </li>
+        <li>
+            W terminalu <em>rbd1</em> dokończ transakcję T1 za pomocą
+            polecenia SQL <code>COMMIT;</code>.
+        </li>
+        <li>
+            W terminalu <em>rbd2</em> spróbuj zatwierdzić transakcję T2. Co
+            się stało?
+        </li>
+        <li>
+            W terminalu <em>rbd2</em> zrestartuj całą transakcję T2
+            przewidzianą dla bazy danych RBD2 i zatwierdź transakcję.
+        </li>
+        <li>
+            W celu uniknięcia zakleszczenia przed pierwszym poleceniem
+            modyfikującym zdalny obiekt należałoby wykonać polecenie <code>SET LOCAL statement_timeout = 10000;</code>, które na czas do końca transakcji ogranicza
+            czas wykonania dalszych poleceń w transakcji do wskazanego w
+            milisekundach czasu (w tym przypadku 10s).
+        </li>
+        <li>
+            Zrealizuj powyższe transakcje wykorzystując parametr
+            statement_timeout w celu uniknięcia zakleszczenia. Jakie wady posiada to
+            rozwiązanie? <mark>[Raport]</mark>
+        </li>
+    </ol>
+    <h2 id="prosta-replikacja-danych">Prosta replikacja danych</h2>
+    Replikacja jest procesem powielania tych samych danych w różnych
+    bazach danych w rozproszonym systemie informatycznym. Proces ten
+    zwiększa niezawodność dostępu do danych oraz wydajność. Celem zadania
+    jest zapoznanie się z prostym mechanizmem asynchronicznej replikacji
+    typu master-slaves implementowanej za pomocą <a
+        href="https://www.postgresql.org/docs/current/static/sql-creatematerializedview.html">materializowanych
+        perspektyw</a>. Asynchroniczność replikacji oznacza, że uaktualnianie
+    zawartości materializowanej perspektywy następuje niezależnie od
+    transakcji modyfikującej dane źródłowe. W replikacji master-slaves dane
+    mogą być modyfikowane jedynie w bazie danych zawierającej tabele
+    źródłowe, repliki służą jedynie do odczytu.
+    <ol>
+        <li>
+            W bazie danych RBD1 utwórz materializowaną perspektywę za pomocą
+            poniższego polecenia:
+            <pre><code>CREATE MATERIALIZED VIEW zespoly_replika AS SELECT * FROM zespoly;</code></pre>
+        </li>
+        <li>
+            Sprawdź zawartość materializowanej perspektywy
+            <em>zespoly_replika</em>.
+        </li>
+        <li>
+            W bazie danych RBD2 wykonaj poniższe polecenie w celu zmiany
+            danych źródłowych w tabeli <em>zespoly</em>.
+            <pre><code>update zespoly set adres='PIOTROWO 43' where id_zesp=10;</code></pre>
+        </li>
+        <li>
+            Sprawdź zawartość materializowanej perspektywy
+            <em>zespoly_replika</em>. Czy się zmieniała? Dlaczego?
+
+        </li>
+        <li>
+            W bazie danych RBD1 <a
+                href="https://www.postgresql.org/docs/current/static/sql-refreshmaterializedview.html">odśwież
+                zawartość materializowanej</a> perspektywy za pomocą poniższego
+            polecenia:
+            <pre><code>REFRESH MATERIALIZED VIEW zespoly_replika;</code></pre>
+        </li>
+        <li>
+            Sprawdź zawartość materializowanej perspektywy
+            <em>zespoly_replika</em>. Jaka jest wada takiego sposobu odświeżania
+            materializowanych perspektyw? <mark>[Raport]</mark>
+        </li>
+        <li>
+            W następnym etapie będziemy automatycznie, cyklicznie odświeżać
+            materializowaną perspektywę. W tym celu zainstalujemy <a
+                href="https://github.com/citusdata/pg_cron/">rozszerzenie pg_cron</a>,
+            które nie znajduje się w standardowej dystrybucji systemu
+            Postgres.
+            Przygotujemy kolejną wersję naszego obrazu Docker systemu
+            Postgres.
+        </li>
+        <li>
+            Pobierz plik <em>dockerfile</em> za pomocą poniższego
+            polecenia:
+            <pre><code>wget http://www.cs.put.poznan.pl/jjezierski/RBDv3/pg_cron.dockerfile</code></pre>
+        </li>
+        <li>
+            Przeglądnij ten plik wykorzystując poniższe polecenie:
+            less pg_cron.dockerfile
+            Dyrektywa FROM wskazuje na źródłowy obraz, który wykorzystamy jako
+            bazę dla naszego obrazu, skorzystamy z obrazu rbd/postgres17:1.0, który
+            przygotowaliśmy wcześniej. Dyrektywa RUN uruchamia polecenie wewnątrz
+            źródłowego obrazu. Wykorzystamy sekwencję poleceń, które zainstaluje
+            pliki rozszerzenia pg_cron w systemie plikowym naszej wersji obrazu.
+            Zamiast wielu dyrektyw RUN do uruchomienia każdego polecenia instalacji
+            oddzielnie zastosowano sekwencję poleceń w jednej dyrektywie. Takie
+            rozwiązanie minimalizuje liczbę warstw obrazu kontenera, które są
+            generowane przez każdą dyrektywę, co optymalizuje rozmiar docelowego
+            obrazu. Zwróć uwagę na odmienny sposób instalacji rozszerzenia
+            postgres_fdw_plus i pg_cron. Wynika z faktu, że rozszerzenie pg_cron
+            jest w repozytorium Postgresa dostępne w postaci binarnej przeznaczonej
+            na wersję Linux obrazu docelowego, natomiast rozszerzenie pg_fdw_plus
+            jest dostępne jedynie w wersji źródłowej.
+            <p>Opuść program <em>less</em> wybierając przycisk <em>q</em>.</p>
+        </li>
+        <li>
+            Utwórz wersję 1.1 obrazu wykonując polecenie:
+            <pre><code>docker build -t rbd/postgres17:1.1 - < pg_cron.dockerfile</code></pre>
+            Przełącznik <em>t</em> polecenia <em>docker build</em> służy do
+            wskazania nazwy i wersji naszego obrazu.
+        </li>
+        <li>
+            Utworzony obraz jest dostępny jedynie lokalnie. W celu
+            zaimportowania go do klastra wykonaj poniższe polecenie:
+            <pre><code>k3d image import rbd/postgres17:1.1 --cluster RBDcluster</code></pre>
+        </li>
+        <li>
+            Zmodyfikuj plik manifestów rbd1.yaml, ustaw wartość klucza
+            <em>image</em> na wartość <em>rbd/postgres17:1.1</em> w celu
+            zastosowania własnego obrazu kontenera.
+        </li>
+        <li>
+            Wykonaj wdrożenie z wykorzystaniem zmodyfikowanego pliku
+            manifestów. W środowisku wykonawczym zostaną wprowadzone zmiany jedynie
+            wynikające ze zmian w manifeście. W szczególności nie zostaną zmienione
+            trwałe woluminy, dzięki temu stan bazy danych <em>rbd1</em> jest ten sam
+            jak przed wdrożeniem zmian.
+        </li>
+        <li>
+            Zrestartuj połączenie z psql do bazy danych RBD1.
+        </li>
+        <li>
+            W celu załadowania do Postgresa zainstalowanej w obrazie
+            biblioteki pg_cron wykonaj w bazie RBD1 następujące polecenie:
+            <pre><code>alter system set shared_preload_libraries = 'pg_cron';</code></pre>
+        </li>
+        <li>
+            W terminalu pomocniczym zrestartuj Pod pgsql-rbd1, w celu
+            zaaplikowanie zmian wprowadzonych w poprzednim kroku.
+        </li>
+        <li>
+            Zrestartuj połączenie z psql do bazy danych RBD1.
+        </li>
+        <li>
+            Utwórz w bazie danych RBD1 rozszerzenie pg_cron wykonując w psql
+            poniższe polecenie:
+            <pre><code>CREATE EXTENSION pg_cron;</code></pre>
+        </li>
+        <li>
+            Powtórz kroki od 12 do 18 dla bazy danych RBD2.
+        </li>
+        <li>
+            Wykorzystaj dokumentację <a href="https://github.com/citusdata/pg_cron/">rozszerzenia pg_cron</a> do
+            przygotowanie polecenia, które automatycznie, cyklicznie (np. co 5
+            minut) będzie odświeżać materializowaną perspektywę zespoly_replika
+            <mark>[Raport]</mark>.
+        </li>
+        <li>
+            Usuń klaster RBDcluster wykonując w terminalu pomocniczym
+            polecenie:
+                <pre><code>k3d cluster delete RBDcluster</code></pre>
+
+        </li>
+    </ol>
+    <p>Usuń wdrożenie baz danych rbd1 i rbd2, wykonując w terminalu pomocniczym poniższe polecenia:</p>
+<pre><code>kubectl delete -f rbd1.yaml
+kubectl delete -f rbd2.yaml
+</code></pre>
+<p>Usunięcie wdrożenia nie usuwa trwałych woluminów, wykonaj poniższe polecenia aby je usunąć</p>
+<pre><code>kubectl delete pvc -l app=pgsql-rbd1
+kubectl delete pvc -l app=pgsql-rbd2    
+</code></pre>
+
+</article>
+<style type="text/css">
+    /* Ograniczamy działanie liczników tylko do artykułu z klasą .tutorial */
+article.tutorial {
+  counter-reset: h2counter; /* reset głównego licznika */
+}
+
+/* --- Numerowanie h2 --- */
+article.tutorial h2 {
+  counter-increment: h2counter;     /* zwiększamy licznik h2 */
+  counter-reset: h3counter;         /* resetujemy podrzędne liczniki */
+}
+
+article.tutorial h2::before {
+  content: counter(h2counter) ". ";
+  font-weight: normal;
+  color: #555;
+}
+
+/* --- Numerowanie h3 --- */
+article.tutorial h3 {
+  counter-increment: h3counter;
+  counter-reset: h4counter;
+}
+
+article.tutorial h3::before {
+  content: counter(h2counter) "." counter(h3counter) " ";
+  font-weight: normal;
+  color: #777;
+}
+
+/* --- Numerowanie h4 (opcjonalnie) --- */
+article.tutorial h4 {
+  counter-increment: h4counter;
+}
+
+article.tutorial h4::before {
+  content: counter(h2counter) "." counter(h3counter) "." counter(h4counter) " ";
+  font-weight: normal;
+  color: #999;
+}
+
+    article.tutorial {
+        font: 400 16px/1.5 "Helvetica Neue", Helvetica, Arial, sans-serif;
+        color: #111;
+        background-color: #fbfbfb;
+        -webkit-text-size-adjust: 100%;
+        -webkit-font-feature-settings: "kern" 1;
+        -moz-font-feature-settings: "kern" 1;
+        -o-font-feature-settings: "kern" 1;
+        font-feature-settings: "kern" 1;
+        font-kerning: normal;
+        padding: 30px;
+    }
+
+    @media only screen and (max-width: 600px) {
+        article.tutorial {
+            padding: 5px;
+        }
+
+        article.tutorial>#content {
+            padding: 0px 20px 20px 20px !important;
+        }
+    }
+
+    article.tutorial>#content {
+        margin: 0px;
+        max-width: 900px;
+        border: 1px solid #e1e4e8;
+        padding: 10px 40px;
+        padding-bottom: 20px;
+        border-radius: 2px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    article.tutorial summary {
+        cursor: pointer;
+        text-decoration: underline;
+    }
+
+    article.tutorial hr {
+        color: #bbb;
+        background-color: #bbb;
+        height: 1px;
+        flex: 0 1 auto;
+        margin: 1em 0;
+        padding: 0;
+        border: none;
+    }
+
+    article.tutorial .hljs-operator {
+        color: #868686;
+        /* There is a bug where the syntax highlighter would pick no color for e.g. `&&` symbols in the code samples. Let's overwrite this */
+    }
+
+    /* Links */
+    article.tutorial a {
+        color: #0366d6;
+        text-decoration: none;
+    }
+
+    article.tutorial a:visited {
+        color: #0366d6;
+    }
+
+    article.tutorial a:hover {
+        color: #0366d6;
+        text-decoration: underline;
+    }
+
+    article.tutorial pre {
+        background-color: #f6f8fa;
+        border-radius: 3px;
+        font-size: 85%;
+        line-height: 1.45;
+        overflow: auto;
+        padding: 16px;
+    }
+
+    article.tutorial code {
+        background-color: rgba(27, 31, 35, .05);
+        border-radius: 3px;
+        font-size: 85%;
+        margin: 0;
+        word-wrap: break-word;
+        padding: .2em .4em;
+        font-family: SFMono-Regular, Consolas, Liberation Mono, Menlo, Courier, monospace;
+    }
+
+    article.tutorial pre>code {
+        background-color: transparent;
+        border: 0;
+        display: inline;
+        line-height: inherit;
+        margin: 0;
+        overflow: visible;
+        padding: 0;
+        word-wrap: normal;
+        font-size: 100%;
+    }
+
+    /* Blockquotes */
+    article.tutorial blockquote {
+        margin-left: 30px;
+        margin-top: 0px;
+        margin-bottom: 16px;
+        border-left-width: 3px;
+        padding: 0 1em;
+        color: #828282;
+        border-left: 4px solid #e8e8e8;
+        padding-left: 15px;
+        font-size: 18px;
+        letter-spacing: -1px;
+        font-style: italic;
+    }
+
+    article.tutorial blockquote * {
+        font-style: normal !important;
+        letter-spacing: 0;
+        color: #6a737d !important;
+    }
+
+    /* Tables */
+    article.tutorial table {
+        border-spacing: 2px;
+        display: block;
+        font-size: 14px;
+        overflow: auto;
+        width: 100%;
+        margin-bottom: 16px;
+        border-spacing: 0;
+        border-collapse: collapse;
+    }
+
+    article.tutorial td {
+        padding: 6px 13px;
+        border: 1px solid #dfe2e5;
+    }
+
+    article.tutorial th {
+        font-weight: 600;
+        padding: 6px 13px;
+        border: 1px solid #dfe2e5;
+    }
+
+    article.tutorial tr {
+        background-color: #fff;
+        border-top: 1px solid #c6cbd1;
+    }
+
+    article.tutorial table tr:nth-child(2n) {
+        background-color: #f6f8fa;
+    }
+
+    /* Others */
+    article.tutorial img {
+        max-width: 100%;
+    }
+
+    article.tutorial p {
+        line-height: 24px;
+        font-weight: 400;
+        font-size: 16px;
+        color: #24292e;
+    }
+
+    article.tutorial ul {
+        margin-top: 0;
+    }
+
+    article.tutorial li {
+        color: #24292e;
+        font-size: 16px;
+        font-weight: 400;
+        line-height: 1.5;
+    }
+
+    article.tutorial li+li {
+        margin-top: 0.25em;
+    }
+
+    article.tutorial * {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+        color: #24292e;
+    }
+
+    article.tutorial a:visited {
+        color: #0366d6;
+    }
+
+    article.tutorial h1,
+    article.tutorial h2,
+    article.tutorial h3 {
+        border-bottom: 1px solid #eaecef;
+        color: #111;
+        /* Darker */
+    }
+
+    article.tutorial code>* {
+        font-family: Consolas, "Liberation Mono", Menlo, Courier, monospace !important;
+    }
+</style>

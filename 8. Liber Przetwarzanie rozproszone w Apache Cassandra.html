@@ -1,0 +1,1571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Przetwarzanie rozproszone w Apache Cassandra</title>
+  <style>
+  @font-face {
+  font-family: octicons-link;
+  src: url(data:font/woff;charset=utf-8;base64,d09GRgABAAAAAAZwABAAAAAACFQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABEU0lHAAAGaAAAAAgAAAAIAAAAAUdTVUIAAAZcAAAACgAAAAoAAQAAT1MvMgAAAyQAAABJAAAAYFYEU3RjbWFwAAADcAAAAEUAAACAAJThvmN2dCAAAATkAAAABAAAAAQAAAAAZnBnbQAAA7gAAACyAAABCUM+8IhnYXNwAAAGTAAAABAAAAAQABoAI2dseWYAAAFsAAABPAAAAZwcEq9taGVhZAAAAsgAAAA0AAAANgh4a91oaGVhAAADCAAAABoAAAAkCA8DRGhtdHgAAAL8AAAADAAAAAwGAACfbG9jYQAAAsAAAAAIAAAACABiATBtYXhwAAACqAAAABgAAAAgAA8ASm5hbWUAAAToAAABQgAAAlXu73sOcG9zdAAABiwAAAAeAAAAME3QpOBwcmVwAAAEbAAAAHYAAAB/aFGpk3jaTY6xa8JAGMW/O62BDi0tJLYQincXEypYIiGJjSgHniQ6umTsUEyLm5BV6NDBP8Tpts6F0v+k/0an2i+itHDw3v2+9+DBKTzsJNnWJNTgHEy4BgG3EMI9DCEDOGEXzDADU5hBKMIgNPZqoD3SilVaXZCER3/I7AtxEJLtzzuZfI+VVkprxTlXShWKb3TBecG11rwoNlmmn1P2WYcJczl32etSpKnziC7lQyWe1smVPy/Lt7Kc+0vWY/gAgIIEqAN9we0pwKXreiMasxvabDQMM4riO+qxM2ogwDGOZTXxwxDiycQIcoYFBLj5K3EIaSctAq2kTYiw+ymhce7vwM9jSqO8JyVd5RH9gyTt2+J/yUmYlIR0s04n6+7Vm1ozezUeLEaUjhaDSuXHwVRgvLJn1tQ7xiuVv/ocTRF42mNgZGBgYGbwZOBiAAFGJBIMAAizAFoAAABiAGIAznjaY2BkYGAA4in8zwXi+W2+MjCzMIDApSwvXzC97Z4Ig8N/BxYGZgcgl52BCSQKAA3jCV8CAABfAAAAAAQAAEB42mNgZGBg4f3vACQZQABIMjKgAmYAKEgBXgAAeNpjYGY6wTiBgZWBg2kmUxoDA4MPhGZMYzBi1AHygVLYQUCaawqDA4PChxhmh/8ODDEsvAwHgMKMIDnGL0x7gJQCAwMAJd4MFwAAAHjaY2BgYGaA4DAGRgYQkAHyGMF8NgYrIM3JIAGVYYDT+AEjAwuDFpBmA9KMDEwMCh9i/v8H8sH0/4dQc1iAmAkALaUKLgAAAHjaTY9LDsIgEIbtgqHUPpDi3gPoBVyRTmTddOmqTXThEXqrob2gQ1FjwpDvfwCBdmdXC5AVKFu3e5MfNFJ29KTQT48Ob9/lqYwOGZxeUelN2U2R6+cArgtCJpauW7UQBqnFkUsjAY/kOU1cP+DAgvxwn1chZDwUbd6CFimGXwzwF6tPbFIcjEl+vvmM/byA48e6tWrKArm4ZJlCbdsrxksL1AwWn/yBSJKpYbq8AXaaTb8AAHja28jAwOC00ZrBeQNDQOWO//sdBBgYGRiYWYAEELEwMTE4uzo5Zzo5b2BxdnFOcALxNjA6b2ByTswC8jYwg0VlNuoCTWAMqNzMzsoK1rEhNqByEyerg5PMJlYuVueETKcd/89uBpnpvIEVomeHLoMsAAe1Id4AAAAAAAB42oWQT07CQBTGv0JBhagk7HQzKxca2sJCE1hDt4QF+9JOS0nbaaYDCQfwCJ7Au3AHj+LO13FMmm6cl7785vven0kBjHCBhfpYuNa5Ph1c0e2Xu3jEvWG7UdPDLZ4N92nOm+EBXuAbHmIMSRMs+4aUEd4Nd3CHD8NdvOLTsA2GL8M9PODbcL+hD7C1xoaHeLJSEao0FEW14ckxC+TU8TxvsY6X0eLPmRhry2WVioLpkrbp84LLQPGI7c6sOiUzpWIWS5GzlSgUzzLBSikOPFTOXqly7rqx0Z1Q5BAIoZBSFihQYQOOBEdkCOgXTOHA07HAGjGWiIjaPZNW13/+lm6S9FT7rLHFJ6fQbkATOG1j2OFMucKJJsxIVfQORl+9Jyda6Sl1dUYhSCm1dyClfoeDve4qMYdLEbfqHf3O/AdDumsjAAB42mNgYoAAZQYjBmyAGYQZmdhL8zLdDEydARfoAqIAAAABAAMABwAKABMAB///AA8AAQAAAAAAAAAAAAAAAAABAAAAAA==) format('woff');
+}
+
+.markdown-body .octicon {
+  display: inline-block;
+  fill: currentColor;
+  vertical-align: text-bottom;
+}
+
+.markdown-body .anchor {
+  float: left;
+  line-height: 1;
+  margin-left: -20px;
+  padding-right: 4px;
+}
+
+.markdown-body .anchor:focus {
+  outline: none;
+}
+
+.markdown-body h1 .octicon-link,
+.markdown-body h2 .octicon-link,
+.markdown-body h3 .octicon-link,
+.markdown-body h4 .octicon-link,
+.markdown-body h5 .octicon-link,
+.markdown-body h6 .octicon-link {
+  color: #1b1f23;
+  vertical-align: middle;
+  visibility: hidden;
+}
+
+.markdown-body h1:hover .anchor,
+.markdown-body h2:hover .anchor,
+.markdown-body h3:hover .anchor,
+.markdown-body h4:hover .anchor,
+.markdown-body h5:hover .anchor,
+.markdown-body h6:hover .anchor {
+  text-decoration: none;
+}
+
+.markdown-body h1:hover .anchor .octicon-link,
+.markdown-body h2:hover .anchor .octicon-link,
+.markdown-body h3:hover .anchor .octicon-link,
+.markdown-body h4:hover .anchor .octicon-link,
+.markdown-body h5:hover .anchor .octicon-link,
+.markdown-body h6:hover .anchor .octicon-link {
+  visibility: visible;
+}
+
+.markdown-body {
+  -ms-text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+  color: #24292e;
+  line-height: 1.5;
+  font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif,Apple Color Emoji,Segoe UI Emoji,Segoe UI Symbol;
+  font-size: 16px;
+  line-height: 1.5;
+  word-wrap: break-word;
+}
+
+.markdown-body .pl-c {
+  color: #6a737d;
+}
+
+.markdown-body .pl-c1,
+.markdown-body .pl-s .pl-v {
+  color: #005cc5;
+}
+
+.markdown-body .pl-e,
+.markdown-body .pl-en {
+  color: #6f42c1;
+}
+
+.markdown-body .pl-s .pl-s1,
+.markdown-body .pl-smi {
+  color: #24292e;
+}
+
+.markdown-body .pl-ent {
+  color: #22863a;
+}
+
+.markdown-body .pl-k {
+  color: #d73a49;
+}
+
+.markdown-body .pl-pds,
+.markdown-body .pl-s,
+.markdown-body .pl-s .pl-pse .pl-s1,
+.markdown-body .pl-sr,
+.markdown-body .pl-sr .pl-cce,
+.markdown-body .pl-sr .pl-sra,
+.markdown-body .pl-sr .pl-sre {
+  color: #032f62;
+}
+
+.markdown-body .pl-smw,
+.markdown-body .pl-v {
+  color: #e36209;
+}
+
+.markdown-body .pl-bu {
+  color: #b31d28;
+}
+
+.markdown-body .pl-ii {
+  background-color: #b31d28;
+  color: #fafbfc;
+}
+
+.markdown-body .pl-c2 {
+  background-color: #d73a49;
+  color: #fafbfc;
+}
+
+.markdown-body .pl-c2:before {
+  content: "^M";
+}
+
+.markdown-body .pl-sr .pl-cce {
+  color: #22863a;
+  font-weight: 700;
+}
+
+.markdown-body .pl-ml {
+  color: #735c0f;
+}
+
+.markdown-body .pl-mh,
+.markdown-body .pl-mh .pl-en,
+.markdown-body .pl-ms {
+  color: #005cc5;
+  font-weight: 700;
+}
+
+.markdown-body .pl-mi {
+  color: #24292e;
+  font-style: italic;
+}
+
+.markdown-body .pl-mb {
+  color: #24292e;
+  font-weight: 700;
+}
+
+.markdown-body .pl-md {
+  background-color: #ffeef0;
+  color: #b31d28;
+}
+
+.markdown-body .pl-mi1 {
+  background-color: #f0fff4;
+  color: #22863a;
+}
+
+.markdown-body .pl-mc {
+  background-color: #ffebda;
+  color: #e36209;
+}
+
+.markdown-body .pl-mi2 {
+  background-color: #005cc5;
+  color: #f6f8fa;
+}
+
+.markdown-body .pl-mdr {
+  color: #6f42c1;
+  font-weight: 700;
+}
+
+.markdown-body .pl-ba {
+  color: #586069;
+}
+
+.markdown-body .pl-sg {
+  color: #959da5;
+}
+
+.markdown-body .pl-corl {
+  color: #032f62;
+  text-decoration: underline;
+}
+
+.markdown-body details {
+  display: block;
+}
+
+.markdown-body summary {
+  display: list-item;
+}
+
+.markdown-body a {
+  background-color: transparent;
+}
+
+.markdown-body a:active,
+.markdown-body a:hover {
+  outline-width: 0;
+}
+
+.markdown-body strong {
+  font-weight: inherit;
+  font-weight: bolder;
+}
+
+.markdown-body h1 {
+  font-size: 2em;
+  margin: .67em 0;
+}
+
+.markdown-body img {
+  border-style: none;
+}
+
+.markdown-body code,
+.markdown-body kbd,
+.markdown-body pre {
+  font-family: monospace,monospace;
+  font-size: 1em;
+}
+
+.markdown-body hr {
+  box-sizing: content-box;
+  height: 0;
+  overflow: visible;
+}
+
+.markdown-body input {
+  font: inherit;
+  margin: 0;
+}
+
+.markdown-body input {
+  overflow: visible;
+}
+
+.markdown-body [type=checkbox] {
+  box-sizing: border-box;
+  padding: 0;
+}
+
+.markdown-body * {
+  box-sizing: border-box;
+}
+
+.markdown-body input {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.markdown-body a {
+  color: #0366d6;
+  text-decoration: none;
+}
+
+.markdown-body a:hover {
+  text-decoration: underline;
+}
+
+.markdown-body strong {
+  font-weight: 600;
+}
+
+.markdown-body hr {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #dfe2e5;
+  height: 0;
+  margin: 15px 0;
+  overflow: hidden;
+}
+
+.markdown-body hr:before {
+  content: "";
+  display: table;
+}
+
+.markdown-body hr:after {
+  clear: both;
+  content: "";
+  display: table;
+}
+
+.markdown-body table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+.markdown-body td,
+.markdown-body th {
+  padding: 0;
+}
+
+.markdown-body details summary {
+  cursor: pointer;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin-bottom: 0;
+  margin-top: 0;
+}
+
+.markdown-body h1 {
+  font-size: 32px;
+}
+
+.markdown-body h1,
+.markdown-body h2 {
+  font-weight: 600;
+}
+
+.markdown-body h2 {
+  font-size: 24px;
+}
+
+.markdown-body h3 {
+  font-size: 20px;
+}
+
+.markdown-body h3,
+.markdown-body h4 {
+  font-weight: 600;
+}
+
+.markdown-body h4 {
+  font-size: 16px;
+}
+
+.markdown-body h5 {
+  font-size: 14px;
+}
+
+.markdown-body h5,
+.markdown-body h6 {
+  font-weight: 600;
+}
+
+.markdown-body h6 {
+  font-size: 12px;
+}
+
+.markdown-body p {
+  margin-bottom: 10px;
+  margin-top: 0;
+}
+
+.markdown-body blockquote {
+  margin: 0;
+}
+
+.markdown-body ol,
+.markdown-body ul {
+  margin-bottom: 0;
+  margin-top: 0;
+  padding-left: 0;
+}
+
+.markdown-body ol ol,
+.markdown-body ul ol {
+  list-style-type: lower-roman;
+}
+
+.markdown-body ol ol ol,
+.markdown-body ol ul ol,
+.markdown-body ul ol ol,
+.markdown-body ul ul ol {
+  list-style-type: lower-alpha;
+}
+
+.markdown-body dd {
+  margin-left: 0;
+}
+
+.markdown-body code,
+.markdown-body pre {
+  font-family: SFMono-Regular,Consolas,Liberation Mono,Menlo,Courier,monospace;
+  font-size: 12px;
+}
+
+.markdown-body pre {
+  margin-bottom: 0;
+  margin-top: 0;
+}
+
+.markdown-body input::-webkit-inner-spin-button,
+.markdown-body input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+
+.markdown-body .border {
+  border: 1px solid #e1e4e8!important;
+}
+
+.markdown-body .border-0 {
+  border: 0!important;
+}
+
+.markdown-body .border-bottom {
+  border-bottom: 1px solid #e1e4e8!important;
+}
+
+.markdown-body .rounded-1 {
+  border-radius: 3px!important;
+}
+
+.markdown-body .bg-white {
+  background-color: #fff!important;
+}
+
+.markdown-body .bg-gray-light {
+  background-color: #fafbfc!important;
+}
+
+.markdown-body .text-gray-light {
+  color: #6a737d!important;
+}
+
+.markdown-body .mb-0 {
+  margin-bottom: 0!important;
+}
+
+.markdown-body .my-2 {
+  margin-bottom: 8px!important;
+  margin-top: 8px!important;
+}
+
+.markdown-body .pl-0 {
+  padding-left: 0!important;
+}
+
+.markdown-body .py-0 {
+  padding-bottom: 0!important;
+  padding-top: 0!important;
+}
+
+.markdown-body .pl-1 {
+  padding-left: 4px!important;
+}
+
+.markdown-body .pl-2 {
+  padding-left: 8px!important;
+}
+
+.markdown-body .py-2 {
+  padding-bottom: 8px!important;
+  padding-top: 8px!important;
+}
+
+.markdown-body .pl-3,
+.markdown-body .px-3 {
+  padding-left: 16px!important;
+}
+
+.markdown-body .px-3 {
+  padding-right: 16px!important;
+}
+
+.markdown-body .pl-4 {
+  padding-left: 24px!important;
+}
+
+.markdown-body .pl-5 {
+  padding-left: 32px!important;
+}
+
+.markdown-body .pl-6 {
+  padding-left: 40px!important;
+}
+
+.markdown-body .f6 {
+  font-size: 12px!important;
+}
+
+.markdown-body .lh-condensed {
+  line-height: 1.25!important;
+}
+
+.markdown-body .text-bold {
+  font-weight: 600!important;
+}
+
+.markdown-body:before {
+  content: "";
+  display: table;
+}
+
+.markdown-body:after {
+  clear: both;
+  content: "";
+  display: table;
+}
+
+.markdown-body>:first-child {
+  margin-top: 0!important;
+}
+
+.markdown-body>:last-child {
+  margin-bottom: 0!important;
+}
+
+.markdown-body a:not([href]) {
+  color: inherit;
+  text-decoration: none;
+}
+
+.markdown-body blockquote,
+.markdown-body dl,
+.markdown-body ol,
+.markdown-body p,
+.markdown-body pre,
+.markdown-body table,
+.markdown-body ul {
+  margin-bottom: 16px;
+  margin-top: 0;
+}
+
+.markdown-body hr {
+  background-color: #e1e4e8;
+  border: 0;
+  height: .25em;
+  margin: 24px 0;
+  padding: 0;
+}
+
+.markdown-body blockquote {
+  border-left: .25em solid #dfe2e5;
+  color: #6a737d;
+  padding: 0 1em;
+}
+
+.markdown-body blockquote>:first-child {
+  margin-top: 0;
+}
+
+.markdown-body blockquote>:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body kbd {
+  background-color: #fafbfc;
+  border: 1px solid #c6cbd1;
+  border-bottom-color: #959da5;
+  border-radius: 3px;
+  box-shadow: inset 0 -1px 0 #959da5;
+  color: #444d56;
+  display: inline-block;
+  font-size: 11px;
+  line-height: 10px;
+  padding: 3px 5px;
+  vertical-align: middle;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  font-weight: 600;
+  line-height: 1.25;
+  margin-bottom: 16px;
+  margin-top: 24px;
+}
+
+.markdown-body h1 {
+  font-size: 2em;
+}
+
+.markdown-body h1,
+.markdown-body h2 {
+  border-bottom: 1px solid #eaecef;
+  padding-bottom: .3em;
+}
+
+.markdown-body h2 {
+  font-size: 1.5em;
+}
+
+.markdown-body h3 {
+  font-size: 1.25em;
+}
+
+.markdown-body h4 {
+  font-size: 1em;
+}
+
+.markdown-body h5 {
+  font-size: .875em;
+}
+
+.markdown-body h6 {
+  color: #6a737d;
+  font-size: .85em;
+}
+
+.markdown-body ol,
+.markdown-body ul {
+  padding-left: 2em;
+}
+
+.markdown-body ol ol,
+.markdown-body ol ul,
+.markdown-body ul ol,
+.markdown-body ul ul {
+  margin-bottom: 0;
+  margin-top: 0;
+}
+
+.markdown-body li {
+  word-wrap: break-all;
+}
+
+.markdown-body li>p {
+  margin-top: 16px;
+}
+
+.markdown-body li+li {
+  margin-top: .25em;
+}
+
+.markdown-body dl {
+  padding: 0;
+}
+
+.markdown-body dl dt {
+  font-size: 1em;
+  font-style: italic;
+  font-weight: 600;
+  margin-top: 16px;
+  padding: 0;
+}
+
+.markdown-body dl dd {
+  margin-bottom: 16px;
+  padding: 0 16px;
+}
+
+.markdown-body table {
+  display: block;
+  overflow: auto;
+  width: 100%;
+}
+
+.markdown-body table th {
+  font-weight: 600;
+}
+
+.markdown-body table td,
+.markdown-body table th {
+  border: 1px solid #dfe2e5;
+  padding: 6px 13px;
+}
+
+.markdown-body table tr {
+  background-color: #fff;
+  border-top: 1px solid #c6cbd1;
+}
+
+.markdown-body table tr:nth-child(2n) {
+  background-color: #f6f8fa;
+}
+
+.markdown-body img {
+  background-color: #fff;
+  box-sizing: content-box;
+  max-width: 100%;
+}
+
+.markdown-body img[align=right] {
+  padding-left: 20px;
+}
+
+.markdown-body img[align=left] {
+  padding-right: 20px;
+}
+
+.markdown-body code {
+  background-color: rgba(27,31,35,.05);
+  border-radius: 3px;
+  font-size: 85%;
+  margin: 0;
+  padding: .2em .4em;
+}
+
+.markdown-body pre {
+  word-wrap: normal;
+}
+
+.markdown-body pre>code {
+  background: transparent;
+  border: 0;
+  font-size: 100%;
+  margin: 0;
+  padding: 0;
+  white-space: pre;
+  word-break: normal;
+}
+
+.markdown-body .highlight {
+  margin-bottom: 16px;
+}
+
+.markdown-body .highlight pre {
+  margin-bottom: 0;
+  word-break: normal;
+}
+
+.markdown-body .highlight pre,
+.markdown-body pre {
+  background-color: #f6f8fa;
+  border-radius: 3px;
+  font-size: 85%;
+  line-height: 1.45;
+  overflow: auto;
+  padding: 16px;
+}
+
+.markdown-body pre code {
+  background-color: transparent;
+  border: 0;
+  display: inline;
+  line-height: inherit;
+  margin: 0;
+  max-width: auto;
+  overflow: visible;
+  padding: 0;
+  word-wrap: normal;
+}
+
+.markdown-body .commit-tease-sha {
+  color: #444d56;
+  display: inline-block;
+  font-family: SFMono-Regular,Consolas,Liberation Mono,Menlo,Courier,monospace;
+  font-size: 90%;
+}
+
+.markdown-body .blob-wrapper {
+  border-bottom-left-radius: 3px;
+  border-bottom-right-radius: 3px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.markdown-body .blob-wrapper-embedded {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.markdown-body .blob-num {
+  -moz-user-select: none;
+  -ms-user-select: none;
+  -webkit-user-select: none;
+  color: rgba(27,31,35,.3);
+  cursor: pointer;
+  font-family: SFMono-Regular,Consolas,Liberation Mono,Menlo,Courier,monospace;
+  font-size: 12px;
+  line-height: 20px;
+  min-width: 50px;
+  padding-left: 10px;
+  padding-right: 10px;
+  text-align: right;
+  user-select: none;
+  vertical-align: top;
+  white-space: nowrap;
+  width: 1%;
+}
+
+.markdown-body .blob-num:hover {
+  color: rgba(27,31,35,.6);
+}
+
+.markdown-body .blob-num:before {
+  content: attr(data-line-number);
+}
+
+.markdown-body .blob-code {
+  line-height: 20px;
+  padding-left: 10px;
+  padding-right: 10px;
+  position: relative;
+  vertical-align: top;
+}
+
+.markdown-body .blob-code-inner {
+  color: #24292e;
+  font-family: SFMono-Regular,Consolas,Liberation Mono,Menlo,Courier,monospace;
+  font-size: 12px;
+  overflow: visible;
+  white-space: pre;
+  word-wrap: normal;
+}
+
+.markdown-body .pl-token.active,
+.markdown-body .pl-token:hover {
+  background: #ffea7f;
+  cursor: pointer;
+}
+
+.markdown-body kbd {
+  background-color: #fafbfc;
+  border: 1px solid #d1d5da;
+  border-bottom-color: #c6cbd1;
+  border-radius: 3px;
+  box-shadow: inset 0 -1px 0 #c6cbd1;
+  color: #444d56;
+  display: inline-block;
+  font: 11px SFMono-Regular,Consolas,Liberation Mono,Menlo,Courier,monospace;
+  line-height: 10px;
+  padding: 3px 5px;
+  vertical-align: middle;
+}
+
+.markdown-body :checked+.radio-label {
+  border-color: #0366d6;
+  position: relative;
+  z-index: 1;
+}
+
+.markdown-body .tab-size[data-tab-size="1"] {
+  -moz-tab-size: 1;
+  tab-size: 1;
+}
+
+.markdown-body .tab-size[data-tab-size="2"] {
+  -moz-tab-size: 2;
+  tab-size: 2;
+}
+
+.markdown-body .tab-size[data-tab-size="3"] {
+  -moz-tab-size: 3;
+  tab-size: 3;
+}
+
+.markdown-body .tab-size[data-tab-size="4"] {
+  -moz-tab-size: 4;
+  tab-size: 4;
+}
+
+.markdown-body .tab-size[data-tab-size="5"] {
+  -moz-tab-size: 5;
+  tab-size: 5;
+}
+
+.markdown-body .tab-size[data-tab-size="6"] {
+  -moz-tab-size: 6;
+  tab-size: 6;
+}
+
+.markdown-body .tab-size[data-tab-size="7"] {
+  -moz-tab-size: 7;
+  tab-size: 7;
+}
+
+.markdown-body .tab-size[data-tab-size="8"] {
+  -moz-tab-size: 8;
+  tab-size: 8;
+}
+
+.markdown-body .tab-size[data-tab-size="9"] {
+  -moz-tab-size: 9;
+  tab-size: 9;
+}
+
+.markdown-body .tab-size[data-tab-size="10"] {
+  -moz-tab-size: 10;
+  tab-size: 10;
+}
+
+.markdown-body .tab-size[data-tab-size="11"] {
+  -moz-tab-size: 11;
+  tab-size: 11;
+}
+
+.markdown-body .tab-size[data-tab-size="12"] {
+  -moz-tab-size: 12;
+  tab-size: 12;
+}
+
+.markdown-body .task-list-item {
+  list-style-type: none;
+}
+
+.markdown-body .task-list-item+.task-list-item {
+  margin-top: 3px;
+}
+
+.markdown-body .task-list-item input {
+  margin: 0 .2em .25em -1.6em;
+  vertical-align: middle;
+}
+
+.markdown-body hr {
+  border-bottom-color: #eee;
+}
+
+.markdown-body .pl-0 {
+  padding-left: 0!important;
+}
+
+.markdown-body .pl-1 {
+  padding-left: 4px!important;
+}
+
+.markdown-body .pl-2 {
+  padding-left: 8px!important;
+}
+
+.markdown-body .pl-3 {
+  padding-left: 16px!important;
+}
+
+.markdown-body .pl-4 {
+  padding-left: 24px!important;
+}
+
+.markdown-body .pl-5 {
+  padding-left: 32px!important;
+}
+
+.markdown-body .pl-6 {
+  padding-left: 40px!important;
+}
+
+.markdown-body .pl-7 {
+  padding-left: 48px!important;
+}
+
+.markdown-body .pl-8 {
+  padding-left: 64px!important;
+}
+
+.markdown-body .pl-9 {
+  padding-left: 80px!important;
+}
+
+.markdown-body .pl-10 {
+  padding-left: 96px!important;
+}
+
+.markdown-body .pl-11 {
+  padding-left: 112px!important;
+}
+
+.markdown-body .pl-12 {
+  padding-left: 128px!important;
+}
+
+  </style>
+  <style>
+  /**
+ * prism.js default theme for JavaScript, CSS and HTML
+ * Based on dabblet (http://dabblet.com)
+ * @author Lea Verou
+ */
+
+code[class*="language-"],
+pre[class*="language-"] {
+	color: black;
+	background: none;
+	text-shadow: 0 1px white;
+	font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+	font-size: 1em;
+	text-align: left;
+	white-space: pre;
+	word-spacing: normal;
+	word-break: normal;
+	word-wrap: normal;
+	line-height: 1.5;
+
+	-moz-tab-size: 4;
+	-o-tab-size: 4;
+	tab-size: 4;
+
+	-webkit-hyphens: none;
+	-moz-hyphens: none;
+	-ms-hyphens: none;
+	hyphens: none;
+}
+
+pre[class*="language-"]::-moz-selection, pre[class*="language-"] ::-moz-selection,
+code[class*="language-"]::-moz-selection, code[class*="language-"] ::-moz-selection {
+	text-shadow: none;
+	background: #b3d4fc;
+}
+
+pre[class*="language-"]::selection, pre[class*="language-"] ::selection,
+code[class*="language-"]::selection, code[class*="language-"] ::selection {
+	text-shadow: none;
+	background: #b3d4fc;
+}
+
+@media print {
+	code[class*="language-"],
+	pre[class*="language-"] {
+		text-shadow: none;
+	}
+}
+
+/* Code blocks */
+pre[class*="language-"] {
+	padding: 1em;
+	margin: .5em 0;
+	overflow: auto;
+}
+
+:not(pre) > code[class*="language-"],
+pre[class*="language-"] {
+	background: #f5f2f0;
+}
+
+/* Inline code */
+:not(pre) > code[class*="language-"] {
+	padding: .1em;
+	border-radius: .3em;
+	white-space: normal;
+}
+
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+	color: slategray;
+}
+
+.token.punctuation {
+	color: #999;
+}
+
+.token.namespace {
+	opacity: .7;
+}
+
+.token.property,
+.token.tag,
+.token.boolean,
+.token.number,
+.token.constant,
+.token.symbol,
+.token.deleted {
+	color: #905;
+}
+
+.token.selector,
+.token.attr-name,
+.token.string,
+.token.char,
+.token.builtin,
+.token.inserted {
+	color: #690;
+}
+
+.token.operator,
+.token.entity,
+.token.url,
+.language-css .token.string,
+.style .token.string {
+	color: #9a6e3a;
+	/* This background color was intended by the author of this theme. */
+	background: hsla(0, 0%, 100%, .5);
+}
+
+.token.atrule,
+.token.attr-value,
+.token.keyword {
+	color: #07a;
+}
+
+.token.function,
+.token.class-name {
+	color: #DD4A68;
+}
+
+.token.regex,
+.token.important,
+.token.variable {
+	color: #e90;
+}
+
+.token.important,
+.token.bold {
+	font-weight: bold;
+}
+.token.italic {
+	font-style: italic;
+}
+
+.token.entity {
+	cursor: help;
+}
+
+  </style>
+  <style>
+  
+  </style>
+  <style>
+    .markdown-body {
+      font-family: -apple-system,Segoe UI,Helvetica,Arial,sans-serif,Apple Color Emoji,Segoe UI Emoji;
+      box-sizing: border-box;
+      min-width: 200px;
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 45px;
+    }
+
+    @media not print {
+      .markdown-body {
+        padding: 45px;
+      }
+
+      @media (max-width: 767px) {
+        .markdown-body {
+          padding: 15px;
+        }
+      }
+    }
+
+    .hf-container {
+      color: #24292e;
+      line-height: 1.3;
+    }
+
+    .markdown-body .highlight pre,
+    .markdown-body pre {
+      white-space: pre-wrap;
+    }
+    .markdown-body table {
+      display: table;
+    }
+    .markdown-body img[data-align="center"] {
+      display: block;
+      margin: 0 auto;
+    }
+    .markdown-body img[data-align="right"] {
+      display: block;
+      margin: 0 0 0 auto;
+    }
+    .markdown-body li.task-list-item {
+      list-style-type: none;
+    }
+    .markdown-body li > [type=checkbox] {
+      margin: 0 0 0 -1.3em;
+    }
+    .markdown-body input[type="checkbox"] ~ p {
+      margin-top: 0;
+      display: inline-block;
+    }
+    .markdown-body ol ol,
+    .markdown-body ul ol {
+      list-style-type: decimal;
+    }
+    .markdown-body ol ol ol,
+    .markdown-body ol ul ol,
+    .markdown-body ul ol ol,
+    .markdown-body ul ul ol {
+      list-style-type: decimal;
+    }
+  </style>
+  <style>.markdown-body a.footnote-ref {
+  text-decoration: none;
+}
+
+.footnotes {
+  font-size: .85em;
+  opacity: .8;
+}
+
+.footnotes li[role="doc-endnote"] {
+  position: relative;
+}
+
+.footnotes .footnote-back {
+  position: absolute;
+  font-family: initial;
+  top: .2em;
+  right: 1em;
+  text-decoration: none;
+}
+
+.inline-math.invalid,
+.multiple-math.invalid {
+  color: rgb(255, 105, 105);
+}
+
+.toc-container {
+  width: 100%;
+}
+
+.toc-container .toc-title {
+  font-weight: 700;
+  font-size: 1.2em;
+  margin-bottom: 0;
+}
+
+.toc-container li,
+.toc-container ul,
+.toc-container ul li {
+  list-style: none !important;
+}
+
+.toc-container > ul {
+  padding-left: 0;
+}
+
+.toc-container ul li span {
+  display : flex;
+}
+
+.toc-container ul li span a {
+  color: inherit;
+  text-decoration: none;
+}
+.toc-container ul li span a:hover {
+  color: inherit;
+  text-decoration: none;
+}
+
+.toc-container ul li span span.dots {
+  flex: 1;
+  height: 0.65em;
+  margin: 0 10px;
+  border-bottom: 2px dotted black;
+}
+</style>
+  <style>.markdown-body{}body {counter-reset: h2}
+h2 {counter-reset: h3}
+h3 {counter-reset: h4}
+h4 {counter-reset: h5}
+h5 {counter-reset: h6}
+h2:before {counter-increment: h2; content: counter(h2) ". "}
+h3:before {counter-increment: h3; content: counter(h2) "." counter(h3) ". "}
+h4:before {counter-increment: h4; content: counter(h2) "." counter(h3) "." counter(h4) ". "}
+h5:before {counter-increment: h5; content: counter(h2) "." counter(h3) "." counter(h4) "." counter(h5) ". "}
+h6:before {counter-increment: h6; content: counter(h2) "." counter(h3) "." counter(h4) "." counter(h5) "." counter(h6) ". "}
+h2.nocount:before, h3.nocount:before, h4.nocount:before, h5.nocount:before, h6.nocount:before { content: ""; counter-increment: none }pre.front-matter{display:none!important;}/** Liber **/
+
+.hf-container,
+.markdown-body {
+  font-family: "Source Sans Pro","Segoe UI","Helvetica Neue","Open Sans",sans-serif,"Apple Color Emoji","Segoe UI Emoji";
+  font-size: 16px;
+  line-height: 1.3;
+  color: #212121;
+}
+
+:root {
+  --footerHeaderBorderColor: #1c1c1c;
+}
+.hf-container {
+  font-size: 0.75em;
+}
+.page-header:not(.simple) .hf-container {
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--footerHeaderBorderColor);
+}
+.page-footer:not(.simple) .hf-container {
+  padding-top: 2px;
+  border-top: 1px solid var(--footerHeaderBorderColor);
+}
+
+.footnotes {
+  font-size: 0.75em;
+  opacity: 0.9;
+}
+.footnotes > hr:first-of-type {
+  width: 250px;
+  height: 1px;
+  background: var(--footerHeaderBorderColor);
+}
+.footnotes > ol > li > p {
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+.footnotes .footnote-back {
+  color: #212121;
+}
+.markdown-body a.footnote-ref {
+  color: #212121;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  font-weight: 600;
+  color: #282828;
+}
+
+.markdown-body h1 {
+  font-size: 1.8em;
+}
+.markdown-body h2 {
+  font-size: 1.6em;
+}
+.markdown-body h3 {
+  font-size: 1.4em;
+}
+.markdown-body h4,
+.markdown-body h5 {
+  font-size: 1.2em;
+}
+.markdown-body h6 {
+  font-size: 1em;
+  font-weight: 400;
+}
+
+.markdown-body h1,
+.markdown-body h2 {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.markdown-body hr {
+  background-color: #d7d8d9;
+  height: 1px;
+}
+
+.markdown-body .highlight pre,
+.markdown-body pre {
+  background-color: #f6f8fa;
+  border: 1px solid #e5e5e5;
+  border-radius: 0;
+}
+</style>
+</head>
+<body>
+  <article class="markdown-body"><h1 class="atx" id="viii----przetwarzanie-rozproszone-w-apache-cassandra">VIII.    Przetwarzanie rozproszone w Apache Cassandra</h1>
+<p>Celem zajęć jest zapoznanie się przetwarzaniem rozproszonym w bazie danych <a href="https://pl.wikipedia.org/wiki/Apache_Cassandra">Apache Cassandra</a></p>
+<h6 class="atx" id="zagadnienia">Zagadnienia:</h6>
+<ol>
+<li><a href="#transparent-acess">Transparentny dostęp do rozproszonych danych</a></li>
+<li><a href="#consistency-levels">Poziomy spójności odczytu i zapisu</a></li>
+<li><a href="#node-creation">Dołączenie nowego węzła do klastra</a></li>
+<li><a href="#robustness">Odporność na awarię</a></li>
+<li><a href="#node-removal">Usunięcia węzła z klastra</a></li>
+</ol>
+<h2 class="atx" id="przygotowanie-srodowiska">Przygotowanie środowiska</h2>
+<ol>
+<li><p>Zaloguj się do maszyny wirtualnej jako użytkownik rbd używając hasła RBD#7102.</p>
+</li>
+<li><p>Otwórz okno terminala, który nazwiemy terminalem pomocniczym.</p>
+</li>
+<li><p>W pierwszym kroku pobierz plik manifestów za pomocą poniższego polecenia:</p>
+<pre><code class="fenced-code-block">wget www.cs.put.poznan.pl/jjezierski/RBDv2/rbd-cassandra.yaml</code></pre>
+</li>
+<li><p>Otwórz plik manifestów w celu jego przeglądnięcia za pomocą polecenia:</p>
+<pre><code class="fenced-code-block">less rbd-cassandra.yaml</code></pre>
+</li>
+<li><p>Rozpocznij wdrożenie komponentów z pliku manifestów za pomocą następującego polecenia:</p>
+<pre><code class="fenced-code-block">kubectl apply -f rbd-cassandra.yaml</code></pre>
+</li>
+<li><p>Obserwuj postęp wdrożenia StatefulSet wykorzystując poniższe polecenie:</p>
+<pre><code class="fenced-code-block">kubectl get sts --watch</code></pre>
+<p>Wdrożenie wymaga pobrania obrazu kontenera z repozytorium Docker, w związku z tym zajmuje chwilę. Wdrożenie zakończy się w momencie pojawienia się na terminalu wiersza, w którym liczba działających replik będzie równa liczbie żądanych replik. W naszym przypadku liczba ta równa się dwa.</p>
+</li>
+<li><p>Sprawdź status klastra Cassandra, wykonaj w terminalu pomocniczym poniższe polecenie:   </p>
+<pre><code class="fenced-code-block language-bash">kubectl <span class="token builtin class-name">exec</span> -it rbd-cassandra-0 -- nodetool status</code></pre>
+</li>
+<li><p>Otwórz dwie kolejne zakładki w oknie terminala wybierając z menu File pozycję New Tab. Nazwij te zakładki nazwami kolejnych replik od rbd-cassandra-0 do rbd-cassandra-1, wykorzystaj w tym celu pozycję Set Title z menu Terminal. W terminalach rbd-cassandra-0 i rbd-cassandra-1 będziemy wykonywać operacje na węzłach bazy danych uruchomionych odpowiednio w replikach rbd-cassandra-0 1 i rbd-cassandra-1.</p>
+</li>
+<li><p>Obraz kontenera systemu Cassandra przygotowany przez Google nie posiada środowiska Python co uniemożliwia uruchomienie programu <code>cqlsh</code>, który jest interpreterem poleceń systemu Cassandra. W celu rozwiązania powyższego problemu uruchomimy oddzielny Pod o nazwie cqlsh z kontenerem opartym na oficjalnym obrazie Cassandra, który jest wyposażony w odpowiednie narzędzia. W celu uruchomienia takiego Pod wykonaj w poniższe polecenie w zakładce rbd-cassandra-0: </p>
+<pre><code class="fenced-code-block language-bash">kubectl run -it cqlsh --image cassandra:3.11 -- /bin/bash</code></pre>
+</li>
+<li><p>W zakładce rbd-cassandra-0 przyłącz się do węzła rbd-cassandra-0 bazy danych za pomocą narzędzia <code>cqlsh</code> wykonując poniższe polecenie:</p>
+<pre><code class="fenced-code-block">cqlsh rbd-cassandra-0.rbd-cassandra</code></pre>
+</li>
+<li><p>W zakładce rbd-cassandra-0 przyłącz się do Pod cqlsh wykonując polecenie:</p>
+<pre><code class="fenced-code-block">kubectl exec -it cqlsh -- /bin/bash</code></pre>
+</li>
+<li><p>W zakładce rbd-cassandra-1 przyłącz się do węzła rbd-cassandra-1 bazy danych za pomocą narzędzia <code>cqlsh</code> wykonując poniższe polecenie:</p>
+<pre><code class="fenced-code-block">cqlsh rbd-cassandra-1.rbd-cassandra</code></pre>
+</li>
+</ol>
+<h2 class="atx" id="transparentny-dostep-do-rozproszonych-danych-transparent-acess">Transparentny dostęp do rozproszonych danych {#transparent-acess}</h2>
+<ol>
+<li><p>Na węźle rbd-cassandra-0 utwórz obiekt typu keystore o nazwie test. Obiekty te są analogiczne do schematów w relacyjnych bazach danych. Dodatkowo umożliwiają określenie parametrów replikacji tabel, które zostaną w nich umieszczone.</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">CREATE</span> KEYSPACE test <span class="token keyword">WITH</span> <span class="token keyword">replication</span> <span class="token operator">=</span> 
+{<span class="token string">'class'</span>:<span class="token string">'SimpleStrategy'</span><span class="token punctuation">,</span> <span class="token string">'replication_factor'</span> : <span class="token number">1</span>}<span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>Na węźle rbd-cassandra-0 utwórz tabelę dist_tab w keystore test. Definicja klucza podstawowego jest obowiązkowa. Może on być złożony z wielu kolumn. Pierwsza kolumna klucza jest kryterium rozpraszania wierszy na węzły klastra Cassandra.</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">create</span> <span class="token keyword">table</span> test<span class="token punctuation">.</span>dist_tab<span class="token punctuation">(</span>
+id <span class="token keyword">int</span><span class="token punctuation">,</span>
+tekst <span class="token keyword">text</span><span class="token punctuation">,</span>
+<span class="token keyword">primary</span> <span class="token keyword">key</span> <span class="token punctuation">(</span>id<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>Na węźle rbd-cassandra-0 wstaw nowy wiersz do tabeli  test.dist_tab:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">insert</span> <span class="token keyword">into</span> test<span class="token punctuation">.</span>dist_tab<span class="token punctuation">(</span>id<span class="token punctuation">,</span> tekst<span class="token punctuation">)</span> <span class="token keyword">values</span> <span class="token punctuation">(</span><span class="token number">1</span><span class="token punctuation">,</span> <span class="token string">'a'</span><span class="token punctuation">)</span><span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>Na węźle rbd-cassandra-0 odczytaj zawartość tabeli  test.dist_tab:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> test<span class="token punctuation">.</span>dist_tab<span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>Na węźle rbd-cassandra-1 przyłącz się do bazy danych za pomocą narzędzia cqlsh.</p>
+<pre><code class="fenced-code-block language-bash">cqlsh rsbd2</code></pre>
+</li>
+<li><p>Na węźle rbd-cassandra-1 odczytaj zawartość tabeli  test.dist_tab:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> test<span class="token punctuation">.</span>dist_tab<span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>Na węźle rbd-cassandra-1 wstaw nowy wiersz do tabeli  test.dist_tab:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">insert</span> <span class="token keyword">into</span> test<span class="token punctuation">.</span>dist_tab<span class="token punctuation">(</span>id<span class="token punctuation">,</span> tekst<span class="token punctuation">)</span> <span class="token keyword">values</span> <span class="token punctuation">(</span><span class="token number">2</span><span class="token punctuation">,</span> <span class="token string">'b'</span><span class="token punctuation">)</span><span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>Na węźle rbd-cassandra-0 odczytaj zawartość tabeli  test.dist_tab:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> test<span class="token punctuation">.</span>dist_tab<span class="token punctuation">;</span></code></pre>
+</li>
+</ol>
+<h2 class="atx" id="poziomy-spojnosci-odczytu-i-zapisuconsistency-levels">Poziomy spójności odczytu i zapisu{#consistency-levels}</h2>
+<ol>
+<li><p>Na węźle rbd-cassandra-0 sprawdź ustawienie domyślnego poziomu spójności.</p>
+<pre><code class="fenced-code-block language-sql">consistency<span class="token punctuation">;</span> </code></pre>
+</li>
+<li><p>Zapoznaj się z dostępnymi <a href="https://docs.datastax.com/en/archived/cassandra/3.0/cassandra/dml/dmlConfigConsistency.html">poziomami spójności</a>.</p>
+</li>
+<li><p>Na węźle rbd-cassandra-1 opuść narzędzie <code>cqlsh</code>:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">exit</span><span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>W celu zasymulowania awarii węzła rbd-cassandra-1 przeskaluj liczbę replik StatefulSet, który obsługuje klaster Cassandra do jednej, wykonaj w terminalu pomocniczym poniższe polecenie: </p>
+<pre><code class="fenced-code-block">kubectl scale sts rbd-cassandra --replicas=1</code></pre>
+</li>
+<li><p>W terminalu pomocniczym sprawdź status klastra:</p>
+<pre><code class="fenced-code-block language-bash">kubectl <span class="token builtin class-name">exec</span> -it rbd-cassandra-0 -- nodetool status</code></pre>
+</li>
+<li><p>Na węźle rbd-cassandra-0 odczytaj zawartość tabeli  test.dist_tab <mark>[Raport]</mark>:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> test<span class="token punctuation">.</span>dist_tab<span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>Na węźle rbd-cassandra-0 wstaw nowy wiersz do tabeli  test.dist_tab <mark>[Raport]</mark>:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">insert</span> <span class="token keyword">into</span> test<span class="token punctuation">.</span>dist_tab<span class="token punctuation">(</span>id<span class="token punctuation">,</span> tekst<span class="token punctuation">)</span> <span class="token keyword">values</span> <span class="token punctuation">(</span><span class="token number">3</span><span class="token punctuation">,</span> <span class="token string">'c'</span><span class="token punctuation">)</span><span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>Na węźle rbd-cassandra-0 przełącz poziom spójności na <em>any</em>:</p>
+<pre><code class="fenced-code-block language-sql">consistency <span class="token keyword">any</span><span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>Na węźle rbd-cassandra-0 odczytaj zawartość tabeli  test.dist_tab <mark>[Raport]</mark>:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> test<span class="token punctuation">.</span>dist_tab<span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>Na węźle rbd-cassandra-0 wstaw nowy wiersz do tabeli  test.dist_tab <mark>[Raport]</mark>:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">insert</span> <span class="token keyword">into</span> test<span class="token punctuation">.</span>dist_tab<span class="token punctuation">(</span>id<span class="token punctuation">,</span> tekst<span class="token punctuation">)</span> <span class="token keyword">values</span> <span class="token punctuation">(</span><span class="token number">3</span><span class="token punctuation">,</span> <span class="token string">'c'</span><span class="token punctuation">)</span><span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>W terminalu pomocniczym sprawdź status klastra Cassandra:</p>
+<pre><code class="fenced-code-block language-bash">kubectl <span class="token builtin class-name">exec</span> -it rbd-cassandra-0 -- nodetool status </code></pre>
+<p>Skopiuj do schowka identyfikator hosta węzła, który wcześniej został zatrzymany przez zmianę liczby replik. Posiada on status DN.</p>
+</li>
+<li><p>W terminalu pomocniczym usuń zatrzymany węzeł klastra Cassandra, użyj identyfikatora ze schowka.</p>
+<pre><code class="fenced-code-block">kubectl exec -it rbd-cassandra-0 -- nodetool removenode "Host ID"</code></pre>
+</li>
+<li><p>W terminalu pomocniczym sprawdź ponownie status klastra Cassandra </p>
+</li>
+<li><p>Uruchom węzeł rbd-cassandra-1 zwiększając liczbę replik StatefulSet do dwóch. Uruchom w terminalu pomocniczym poniższe polecenie:</p>
+<pre><code class="fenced-code-block language-bash">kubectl scale sts rbd-cassandra --replicas<span class="token operator">=</span><span class="token number">2</span></code></pre>
+</li>
+<li><p>Monitoruj uruchamianie repliki wykorzystując w terminalu poniższe polecenie:</p>
+<pre><code class="fenced-code-block">kubectl get sts --watch</code></pre>
+</li>
+<li><p>Na węźle rbd-cassandra-1 przyłącz się do bazy danych za pomocą narzędzia cqlsh.</p>
+<pre><code class="fenced-code-block language-bash">cqlsh rbd-cassandra-1.rbd-cassandra</code></pre>
+</li>
+<li><p>Na węźle rbd-cassandra-1 odczytaj zawartość tabeli  test.dist_tab <mark>[Raport]</mark>:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> test<span class="token punctuation">.</span>dist_tab<span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>Na węźle rbd-cassandra-0 odczytaj zawartość tabeli  test.dist_tab <mark>[Raport]</mark>:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> test<span class="token punctuation">.</span>dist_tab<span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>Na węźle rbd-cassandra-0 przełącz poziom izolacji na <em>one</em>:</p>
+<pre><code class="fenced-code-block language-sql">consistency one<span class="token punctuation">;</span></code></pre>
+<h2 class="atx" id="odpornosc-na-awarie-robustness">Odporność na awarię {#robustness}</h2>
+</li>
+<li><p>Na węźle rbd-cassandra-0 utwórz obiekt keystore o nazwie test2 z współczynnikiem replikacji równym dwa. </p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">CREATE</span> KEYSPACE test2 <span class="token keyword">WITH</span> <span class="token keyword">replication</span> <span class="token operator">=</span> 
+{<span class="token string">'class'</span>:<span class="token string">'SimpleStrategy'</span><span class="token punctuation">,</span> <span class="token string">'replication_factor'</span> : <span class="token number">2</span>}<span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>Na węźle rbd-cassandra-0 utwórz tabelę dist_tab2 w keystore test2. </p>
+<pre><code class="fenced-code-block language-sql">    <span class="token keyword">create</span> <span class="token keyword">table</span> test2<span class="token punctuation">.</span>dist_tab2<span class="token punctuation">(</span>
+id <span class="token keyword">int</span><span class="token punctuation">,</span>
+tekst <span class="token keyword">text</span><span class="token punctuation">,</span>
+<span class="token keyword">primary</span> <span class="token keyword">key</span> <span class="token punctuation">(</span>id<span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>Na węźle rbd-cassandra-0 wstaw nowy wiersz do tabeli test2.dist_tab2:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">insert</span> <span class="token keyword">into</span> test2<span class="token punctuation">.</span>dist_tab2<span class="token punctuation">(</span>id<span class="token punctuation">,</span> tekst<span class="token punctuation">)</span> <span class="token keyword">values</span> <span class="token punctuation">(</span><span class="token number">4</span><span class="token punctuation">,</span> <span class="token string">'e'</span><span class="token punctuation">)</span><span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>W celu zasymulowania awarii węzła rbd-cassandra-1 przeskaluj liczbę replik StatefulSet, który obsługuje klaster Cassandra do jeden, wykonaj w terminalu pomocniczym poniższe polecenie: </p>
+<pre><code class="fenced-code-block">kubectl scale sts rbd-cassandra --replicas=1</code></pre>
+</li>
+<li><p>W terminalu pomocniczym sprawdź status klastra:</p>
+<pre><code class="fenced-code-block language-bash">kubectl <span class="token builtin class-name">exec</span> -it rbd-cassandra-0 -- nodetool status</code></pre>
+</li>
+<li><p>Na węźle rbd-cassandra-0 wstaw nowy wiersz do tabeli  test2.dist_tab2 <mark>[Raport]</mark>:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">insert</span> <span class="token keyword">into</span> test2<span class="token punctuation">.</span>dist_tab2<span class="token punctuation">(</span>id<span class="token punctuation">,</span> tekst<span class="token punctuation">)</span> <span class="token keyword">values</span> <span class="token punctuation">(</span><span class="token number">5</span><span class="token punctuation">,</span> <span class="token string">'f'</span><span class="token punctuation">)</span><span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>Na węźle rbd-cassandra-0 odczytaj zawartość tabeli  test2.dist_tab2 <mark>[Raport]</mark>:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> test2<span class="token punctuation">.</span>dist_tab2<span class="token punctuation">;</span></code></pre>
+<p>W terminalu pomocniczym sprawdź status klastra Cassandra:</p>
+<pre><code class="fenced-code-block language-bash">kubectl <span class="token builtin class-name">exec</span> -it rbd-cassandra-0 -- nodetool status </code></pre>
+<p>Skopiuj do schowka identyfikator hosta węzła, który wcześniej został zatrzymany przez zmianę liczby replik. Posiada on status DN.</p>
+</li>
+<li><p>W terminalu pomocniczym usuń zatrzymany węzeł klastra Cassandra, użyj identyfikatora ze schowka.</p>
+<pre><code class="fenced-code-block">kubectl exec -it rbd-cassandra-0 -- nodetool removenode "Host ID"</code></pre>
+</li>
+<li><p>W terminalu pomocniczym sprawdź ponownie status klastra Cassandra </p>
+</li>
+<li><p>Uruchom węzeł rbd-cassandra-1 zwiększając liczbę replik StatefulSet do dwóch. Uruchom w terminalu pomocniczym poniższe polecenie:</p>
+<pre><code class="fenced-code-block language-bash">kubectl scale sts rbd-cassandra --replicas<span class="token operator">=</span><span class="token number">2</span></code></pre>
+</li>
+<li><p>Monitoruj uruchamianie repliki wykorzystując w terminalu poniższe polecenie:</p>
+<pre><code class="fenced-code-block">kubectl get sts --watch</code></pre>
+</li>
+<li><p>Na węźle rbd-cassandra-1 przyłącz się do bazy danych za pomocą narzędzia cqlsh.</p>
+<pre><code class="fenced-code-block">cqlsh rbd-cassandra-1.rbd-cassandra</code></pre>
+</li>
+<li><p>Na węźle rbd-cassandra-1 odczytaj zawartość tabeli  test2.dist_tab2 <mark>[Raport]</mark>:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> test2<span class="token punctuation">.</span>dist_tab2<span class="token punctuation">;</span></code></pre>
+<h2 class="atx" id="dolaczenie-nowego-wezla-do-klastra-node-creation">Dołączenie nowego węzła do klastra {#node-creation}</h2>
+</li>
+<li><p>Uruchom węzeł rbd-cassandra-2 zwiększając liczbę replik StatefulSet do trzech. Uruchom w terminalu pomocniczym poniższe polecenie:</p>
+<pre><code class="fenced-code-block language-bash">kubectl scale sts rbd-cassandra --replicas<span class="token operator">=</span><span class="token number">3</span></code></pre>
+</li>
+<li><p>Monitoruj uruchamianie repliki wykorzystując w terminalu poniższe polecenie:</p>
+<pre><code class="fenced-code-block">kubectl get sts --watch</code></pre>
+</li>
+<li><p>W terminalu pomocniczym sprawdź status klastra:</p>
+<pre><code class="fenced-code-block language-bash">kubectl <span class="token builtin class-name">exec</span> -it rbd-cassandra-0 -- nodetool status</code></pre>
+</li>
+<li><p>Otwórz nową zakładkę terminala, nazwij ją rbd-cassandra-2. W zakładce rbd-cassandra-2 przyłącz się do Pod cqlsh:</p>
+<pre><code class="fenced-code-block language-bash">kubectl <span class="token builtin class-name">exec</span> -it cqlsh -- /bin/bash</code></pre>
+</li>
+<li><p>W zakładce rbd-cassandra-2 przyłącz się do węzła rbd-cassandra-2 klastra Cassandra:</p>
+<pre><code class="fenced-code-block">cqlsh rbd-cassandra-2.rbd-cassandra</code></pre>
+</li>
+<li><p>Na węźle rbd-cassandra-2 odczytaj zawartość tabeli  test2.dist_tab2 <mark>[Raport]</mark>:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> test2<span class="token punctuation">.</span>dist_tab2<span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>W terminalu pomocniczym wyczyść węzeły rbd-cassandra-0 i rbd-cassandra-1 z danych, które zostały przemieszczone do węzła rbd-cassandra-2.</p>
+<pre><code class="fenced-code-block">kubectl exec -it rbd-cassandra-0 -- nodetool cleanup
+kubectl exec -it rbd-cassandra-1 -- nodetool cleanup</code></pre>
+</li>
+</ol>
+<h2 class="atx" id="usuniecia-wezla-z-klastra-node-removal">Usunięcia węzła z klastra {#node-removal}</h2>
+<ol>
+<li><p>Na węźle rbd-cassandra-2 opuść narzędzia cqlsh:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">exit</span><span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>W terminalu pomocniczym przekaż dane węzła rbd-cassandra-2 do innych węzłów klastra:</p>
+<pre><code class="fenced-code-block">kubectl exec -it rbd-cassandra-2 -- nodetool decommission</code></pre>
+</li>
+<li><p>W terminalu pomocniczym monitoruj postęp operacji:</p>
+<pre><code class="fenced-code-block">kubectl exec -it rbd-cassandra-0 -- nodetool status</code></pre>
+</li>
+<li><p>W terminalu pomocniczym usuń Pod rbd-cassandra-2 zmniejszając liczbę replik StatefulSet rbd-cassandra do dwóch:</p>
+<pre><code class="fenced-code-block">kubectl scale sts rbd-cassandra --replicas=2</code></pre>
+</li>
+<li><p>Na węźle rbd-cassandra-0 odczytaj zawartość tabeli  test2.dist_tab2 <mark>[Raport]</mark>:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">select</span> <span class="token operator">*</span> <span class="token keyword">from</span> test2<span class="token punctuation">.</span>dist_tab2<span class="token punctuation">;</span></code></pre>
+</li>
+</ol>
+</article>
+</body>
+</html>

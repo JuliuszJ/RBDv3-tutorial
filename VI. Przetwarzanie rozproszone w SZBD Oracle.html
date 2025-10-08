@@ -1,0 +1,1654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Przetwarzanie rozproszone w Apache Cassandra</title>
+  <style>
+  @font-face {
+  font-family: octicons-link;
+  src: url(data:font/woff;charset=utf-8;base64,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) format('woff');
+}
+
+.markdown-body .octicon {
+  display: inline-block;
+  fill: currentColor;
+  vertical-align: text-bottom;
+}
+
+.markdown-body .anchor {
+  float: left;
+  line-height: 1;
+  margin-left: -20px;
+  padding-right: 4px;
+}
+
+.markdown-body .anchor:focus {
+  outline: none;
+}
+
+.markdown-body h1 .octicon-link,
+.markdown-body h2 .octicon-link,
+.markdown-body h3 .octicon-link,
+.markdown-body h4 .octicon-link,
+.markdown-body h5 .octicon-link,
+.markdown-body h6 .octicon-link {
+  color: #1b1f23;
+  vertical-align: middle;
+  visibility: hidden;
+}
+
+.markdown-body h1:hover .anchor,
+.markdown-body h2:hover .anchor,
+.markdown-body h3:hover .anchor,
+.markdown-body h4:hover .anchor,
+.markdown-body h5:hover .anchor,
+.markdown-body h6:hover .anchor {
+  text-decoration: none;
+}
+
+.markdown-body h1:hover .anchor .octicon-link,
+.markdown-body h2:hover .anchor .octicon-link,
+.markdown-body h3:hover .anchor .octicon-link,
+.markdown-body h4:hover .anchor .octicon-link,
+.markdown-body h5:hover .anchor .octicon-link,
+.markdown-body h6:hover .anchor .octicon-link {
+  visibility: visible;
+}
+
+.markdown-body {
+  -ms-text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+  color: #24292e;
+  line-height: 1.5;
+  font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif,Apple Color Emoji,Segoe UI Emoji,Segoe UI Symbol;
+  font-size: 16px;
+  line-height: 1.5;
+  word-wrap: break-word;
+}
+
+.markdown-body .pl-c {
+  color: #6a737d;
+}
+
+.markdown-body .pl-c1,
+.markdown-body .pl-s .pl-v {
+  color: #005cc5;
+}
+
+.markdown-body .pl-e,
+.markdown-body .pl-en {
+  color: #6f42c1;
+}
+
+.markdown-body .pl-s .pl-s1,
+.markdown-body .pl-smi {
+  color: #24292e;
+}
+
+.markdown-body .pl-ent {
+  color: #22863a;
+}
+
+.markdown-body .pl-k {
+  color: #d73a49;
+}
+
+.markdown-body .pl-pds,
+.markdown-body .pl-s,
+.markdown-body .pl-s .pl-pse .pl-s1,
+.markdown-body .pl-sr,
+.markdown-body .pl-sr .pl-cce,
+.markdown-body .pl-sr .pl-sra,
+.markdown-body .pl-sr .pl-sre {
+  color: #032f62;
+}
+
+.markdown-body .pl-smw,
+.markdown-body .pl-v {
+  color: #e36209;
+}
+
+.markdown-body .pl-bu {
+  color: #b31d28;
+}
+
+.markdown-body .pl-ii {
+  background-color: #b31d28;
+  color: #fafbfc;
+}
+
+.markdown-body .pl-c2 {
+  background-color: #d73a49;
+  color: #fafbfc;
+}
+
+.markdown-body .pl-c2:before {
+  content: "^M";
+}
+
+.markdown-body .pl-sr .pl-cce {
+  color: #22863a;
+  font-weight: 700;
+}
+
+.markdown-body .pl-ml {
+  color: #735c0f;
+}
+
+.markdown-body .pl-mh,
+.markdown-body .pl-mh .pl-en,
+.markdown-body .pl-ms {
+  color: #005cc5;
+  font-weight: 700;
+}
+
+.markdown-body .pl-mi {
+  color: #24292e;
+  font-style: italic;
+}
+
+.markdown-body .pl-mb {
+  color: #24292e;
+  font-weight: 700;
+}
+
+.markdown-body .pl-md {
+  background-color: #ffeef0;
+  color: #b31d28;
+}
+
+.markdown-body .pl-mi1 {
+  background-color: #f0fff4;
+  color: #22863a;
+}
+
+.markdown-body .pl-mc {
+  background-color: #ffebda;
+  color: #e36209;
+}
+
+.markdown-body .pl-mi2 {
+  background-color: #005cc5;
+  color: #f6f8fa;
+}
+
+.markdown-body .pl-mdr {
+  color: #6f42c1;
+  font-weight: 700;
+}
+
+.markdown-body .pl-ba {
+  color: #586069;
+}
+
+.markdown-body .pl-sg {
+  color: #959da5;
+}
+
+.markdown-body .pl-corl {
+  color: #032f62;
+  text-decoration: underline;
+}
+
+.markdown-body details {
+  display: block;
+}
+
+.markdown-body summary {
+  display: list-item;
+}
+
+.markdown-body a {
+  background-color: transparent;
+}
+
+.markdown-body a:active,
+.markdown-body a:hover {
+  outline-width: 0;
+}
+
+.markdown-body strong {
+  font-weight: inherit;
+  font-weight: bolder;
+}
+
+.markdown-body h1 {
+  font-size: 2em;
+  margin: .67em 0;
+}
+
+.markdown-body img {
+  border-style: none;
+}
+
+.markdown-body code,
+.markdown-body kbd,
+.markdown-body pre {
+  font-family: monospace,monospace;
+  font-size: 1em;
+}
+
+.markdown-body hr {
+  box-sizing: content-box;
+  height: 0;
+  overflow: visible;
+}
+
+.markdown-body input {
+  font: inherit;
+  margin: 0;
+}
+
+.markdown-body input {
+  overflow: visible;
+}
+
+.markdown-body [type=checkbox] {
+  box-sizing: border-box;
+  padding: 0;
+}
+
+.markdown-body * {
+  box-sizing: border-box;
+}
+
+.markdown-body input {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.markdown-body a {
+  color: #0366d6;
+  text-decoration: none;
+}
+
+.markdown-body a:hover {
+  text-decoration: underline;
+}
+
+.markdown-body strong {
+  font-weight: 600;
+}
+
+.markdown-body hr {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #dfe2e5;
+  height: 0;
+  margin: 15px 0;
+  overflow: hidden;
+}
+
+.markdown-body hr:before {
+  content: "";
+  display: table;
+}
+
+.markdown-body hr:after {
+  clear: both;
+  content: "";
+  display: table;
+}
+
+.markdown-body table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+.markdown-body td,
+.markdown-body th {
+  padding: 0;
+}
+
+.markdown-body details summary {
+  cursor: pointer;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin-bottom: 0;
+  margin-top: 0;
+}
+
+.markdown-body h1 {
+  font-size: 32px;
+}
+
+.markdown-body h1,
+.markdown-body h2 {
+  font-weight: 600;
+}
+
+.markdown-body h2 {
+  font-size: 24px;
+}
+
+.markdown-body h3 {
+  font-size: 20px;
+}
+
+.markdown-body h3,
+.markdown-body h4 {
+  font-weight: 600;
+}
+
+.markdown-body h4 {
+  font-size: 16px;
+}
+
+.markdown-body h5 {
+  font-size: 14px;
+}
+
+.markdown-body h5,
+.markdown-body h6 {
+  font-weight: 600;
+}
+
+.markdown-body h6 {
+  font-size: 12px;
+}
+
+.markdown-body p {
+  margin-bottom: 10px;
+  margin-top: 0;
+}
+
+.markdown-body blockquote {
+  margin: 0;
+}
+
+.markdown-body ol,
+.markdown-body ul {
+  margin-bottom: 0;
+  margin-top: 0;
+  padding-left: 0;
+}
+
+.markdown-body ol ol,
+.markdown-body ul ol {
+  list-style-type: lower-roman;
+}
+
+.markdown-body ol ol ol,
+.markdown-body ol ul ol,
+.markdown-body ul ol ol,
+.markdown-body ul ul ol {
+  list-style-type: lower-alpha;
+}
+
+.markdown-body dd {
+  margin-left: 0;
+}
+
+.markdown-body code,
+.markdown-body pre {
+  font-family: SFMono-Regular,Consolas,Liberation Mono,Menlo,Courier,monospace;
+  font-size: 12px;
+}
+
+.markdown-body pre {
+  margin-bottom: 0;
+  margin-top: 0;
+}
+
+.markdown-body input::-webkit-inner-spin-button,
+.markdown-body input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+
+.markdown-body .border {
+  border: 1px solid #e1e4e8!important;
+}
+
+.markdown-body .border-0 {
+  border: 0!important;
+}
+
+.markdown-body .border-bottom {
+  border-bottom: 1px solid #e1e4e8!important;
+}
+
+.markdown-body .rounded-1 {
+  border-radius: 3px!important;
+}
+
+.markdown-body .bg-white {
+  background-color: #fff!important;
+}
+
+.markdown-body .bg-gray-light {
+  background-color: #fafbfc!important;
+}
+
+.markdown-body .text-gray-light {
+  color: #6a737d!important;
+}
+
+.markdown-body .mb-0 {
+  margin-bottom: 0!important;
+}
+
+.markdown-body .my-2 {
+  margin-bottom: 8px!important;
+  margin-top: 8px!important;
+}
+
+.markdown-body .pl-0 {
+  padding-left: 0!important;
+}
+
+.markdown-body .py-0 {
+  padding-bottom: 0!important;
+  padding-top: 0!important;
+}
+
+.markdown-body .pl-1 {
+  padding-left: 4px!important;
+}
+
+.markdown-body .pl-2 {
+  padding-left: 8px!important;
+}
+
+.markdown-body .py-2 {
+  padding-bottom: 8px!important;
+  padding-top: 8px!important;
+}
+
+.markdown-body .pl-3,
+.markdown-body .px-3 {
+  padding-left: 16px!important;
+}
+
+.markdown-body .px-3 {
+  padding-right: 16px!important;
+}
+
+.markdown-body .pl-4 {
+  padding-left: 24px!important;
+}
+
+.markdown-body .pl-5 {
+  padding-left: 32px!important;
+}
+
+.markdown-body .pl-6 {
+  padding-left: 40px!important;
+}
+
+.markdown-body .f6 {
+  font-size: 12px!important;
+}
+
+.markdown-body .lh-condensed {
+  line-height: 1.25!important;
+}
+
+.markdown-body .text-bold {
+  font-weight: 600!important;
+}
+
+.markdown-body:before {
+  content: "";
+  display: table;
+}
+
+.markdown-body:after {
+  clear: both;
+  content: "";
+  display: table;
+}
+
+.markdown-body>:first-child {
+  margin-top: 0!important;
+}
+
+.markdown-body>:last-child {
+  margin-bottom: 0!important;
+}
+
+.markdown-body a:not([href]) {
+  color: inherit;
+  text-decoration: none;
+}
+
+.markdown-body blockquote,
+.markdown-body dl,
+.markdown-body ol,
+.markdown-body p,
+.markdown-body pre,
+.markdown-body table,
+.markdown-body ul {
+  margin-bottom: 16px;
+  margin-top: 0;
+}
+
+.markdown-body hr {
+  background-color: #e1e4e8;
+  border: 0;
+  height: .25em;
+  margin: 24px 0;
+  padding: 0;
+}
+
+.markdown-body blockquote {
+  border-left: .25em solid #dfe2e5;
+  color: #6a737d;
+  padding: 0 1em;
+}
+
+.markdown-body blockquote>:first-child {
+  margin-top: 0;
+}
+
+.markdown-body blockquote>:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body kbd {
+  background-color: #fafbfc;
+  border: 1px solid #c6cbd1;
+  border-bottom-color: #959da5;
+  border-radius: 3px;
+  box-shadow: inset 0 -1px 0 #959da5;
+  color: #444d56;
+  display: inline-block;
+  font-size: 11px;
+  line-height: 10px;
+  padding: 3px 5px;
+  vertical-align: middle;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  font-weight: 600;
+  line-height: 1.25;
+  margin-bottom: 16px;
+  margin-top: 24px;
+}
+
+.markdown-body h1 {
+  font-size: 2em;
+}
+
+.markdown-body h1,
+.markdown-body h2 {
+  border-bottom: 1px solid #eaecef;
+  padding-bottom: .3em;
+}
+
+.markdown-body h2 {
+  font-size: 1.5em;
+}
+
+.markdown-body h3 {
+  font-size: 1.25em;
+}
+
+.markdown-body h4 {
+  font-size: 1em;
+}
+
+.markdown-body h5 {
+  font-size: .875em;
+}
+
+.markdown-body h6 {
+  color: #6a737d;
+  font-size: .85em;
+}
+
+.markdown-body ol,
+.markdown-body ul {
+  padding-left: 2em;
+}
+
+.markdown-body ol ol,
+.markdown-body ol ul,
+.markdown-body ul ol,
+.markdown-body ul ul {
+  margin-bottom: 0;
+  margin-top: 0;
+}
+
+.markdown-body li {
+  word-wrap: break-all;
+}
+
+.markdown-body li>p {
+  margin-top: 16px;
+}
+
+.markdown-body li+li {
+  margin-top: .25em;
+}
+
+.markdown-body dl {
+  padding: 0;
+}
+
+.markdown-body dl dt {
+  font-size: 1em;
+  font-style: italic;
+  font-weight: 600;
+  margin-top: 16px;
+  padding: 0;
+}
+
+.markdown-body dl dd {
+  margin-bottom: 16px;
+  padding: 0 16px;
+}
+
+.markdown-body table {
+  display: block;
+  overflow: auto;
+  width: 100%;
+}
+
+.markdown-body table th {
+  font-weight: 600;
+}
+
+.markdown-body table td,
+.markdown-body table th {
+  border: 1px solid #dfe2e5;
+  padding: 6px 13px;
+}
+
+.markdown-body table tr {
+  background-color: #fff;
+  border-top: 1px solid #c6cbd1;
+}
+
+.markdown-body table tr:nth-child(2n) {
+  background-color: #f6f8fa;
+}
+
+.markdown-body img {
+  background-color: #fff;
+  box-sizing: content-box;
+  max-width: 100%;
+}
+
+.markdown-body img[align=right] {
+  padding-left: 20px;
+}
+
+.markdown-body img[align=left] {
+  padding-right: 20px;
+}
+
+.markdown-body code {
+  background-color: rgba(27,31,35,.05);
+  border-radius: 3px;
+  font-size: 85%;
+  margin: 0;
+  padding: .2em .4em;
+}
+
+.markdown-body pre {
+  word-wrap: normal;
+}
+
+.markdown-body pre>code {
+  background: transparent;
+  border: 0;
+  font-size: 100%;
+  margin: 0;
+  padding: 0;
+  white-space: pre;
+  word-break: normal;
+}
+
+.markdown-body .highlight {
+  margin-bottom: 16px;
+}
+
+.markdown-body .highlight pre {
+  margin-bottom: 0;
+  word-break: normal;
+}
+
+.markdown-body .highlight pre,
+.markdown-body pre {
+  background-color: #f6f8fa;
+  border-radius: 3px;
+  font-size: 85%;
+  line-height: 1.45;
+  overflow: auto;
+  padding: 16px;
+}
+
+.markdown-body pre code {
+  background-color: transparent;
+  border: 0;
+  display: inline;
+  line-height: inherit;
+  margin: 0;
+  max-width: auto;
+  overflow: visible;
+  padding: 0;
+  word-wrap: normal;
+}
+
+.markdown-body .commit-tease-sha {
+  color: #444d56;
+  display: inline-block;
+  font-family: SFMono-Regular,Consolas,Liberation Mono,Menlo,Courier,monospace;
+  font-size: 90%;
+}
+
+.markdown-body .blob-wrapper {
+  border-bottom-left-radius: 3px;
+  border-bottom-right-radius: 3px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.markdown-body .blob-wrapper-embedded {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.markdown-body .blob-num {
+  -moz-user-select: none;
+  -ms-user-select: none;
+  -webkit-user-select: none;
+  color: rgba(27,31,35,.3);
+  cursor: pointer;
+  font-family: SFMono-Regular,Consolas,Liberation Mono,Menlo,Courier,monospace;
+  font-size: 12px;
+  line-height: 20px;
+  min-width: 50px;
+  padding-left: 10px;
+  padding-right: 10px;
+  text-align: right;
+  user-select: none;
+  vertical-align: top;
+  white-space: nowrap;
+  width: 1%;
+}
+
+.markdown-body .blob-num:hover {
+  color: rgba(27,31,35,.6);
+}
+
+.markdown-body .blob-num:before {
+  content: attr(data-line-number);
+}
+
+.markdown-body .blob-code {
+  line-height: 20px;
+  padding-left: 10px;
+  padding-right: 10px;
+  position: relative;
+  vertical-align: top;
+}
+
+.markdown-body .blob-code-inner {
+  color: #24292e;
+  font-family: SFMono-Regular,Consolas,Liberation Mono,Menlo,Courier,monospace;
+  font-size: 12px;
+  overflow: visible;
+  white-space: pre;
+  word-wrap: normal;
+}
+
+.markdown-body .pl-token.active,
+.markdown-body .pl-token:hover {
+  background: #ffea7f;
+  cursor: pointer;
+}
+
+.markdown-body kbd {
+  background-color: #fafbfc;
+  border: 1px solid #d1d5da;
+  border-bottom-color: #c6cbd1;
+  border-radius: 3px;
+  box-shadow: inset 0 -1px 0 #c6cbd1;
+  color: #444d56;
+  display: inline-block;
+  font: 11px SFMono-Regular,Consolas,Liberation Mono,Menlo,Courier,monospace;
+  line-height: 10px;
+  padding: 3px 5px;
+  vertical-align: middle;
+}
+
+.markdown-body :checked+.radio-label {
+  border-color: #0366d6;
+  position: relative;
+  z-index: 1;
+}
+
+.markdown-body .tab-size[data-tab-size="1"] {
+  -moz-tab-size: 1;
+  tab-size: 1;
+}
+
+.markdown-body .tab-size[data-tab-size="2"] {
+  -moz-tab-size: 2;
+  tab-size: 2;
+}
+
+.markdown-body .tab-size[data-tab-size="3"] {
+  -moz-tab-size: 3;
+  tab-size: 3;
+}
+
+.markdown-body .tab-size[data-tab-size="4"] {
+  -moz-tab-size: 4;
+  tab-size: 4;
+}
+
+.markdown-body .tab-size[data-tab-size="5"] {
+  -moz-tab-size: 5;
+  tab-size: 5;
+}
+
+.markdown-body .tab-size[data-tab-size="6"] {
+  -moz-tab-size: 6;
+  tab-size: 6;
+}
+
+.markdown-body .tab-size[data-tab-size="7"] {
+  -moz-tab-size: 7;
+  tab-size: 7;
+}
+
+.markdown-body .tab-size[data-tab-size="8"] {
+  -moz-tab-size: 8;
+  tab-size: 8;
+}
+
+.markdown-body .tab-size[data-tab-size="9"] {
+  -moz-tab-size: 9;
+  tab-size: 9;
+}
+
+.markdown-body .tab-size[data-tab-size="10"] {
+  -moz-tab-size: 10;
+  tab-size: 10;
+}
+
+.markdown-body .tab-size[data-tab-size="11"] {
+  -moz-tab-size: 11;
+  tab-size: 11;
+}
+
+.markdown-body .tab-size[data-tab-size="12"] {
+  -moz-tab-size: 12;
+  tab-size: 12;
+}
+
+.markdown-body .task-list-item {
+  list-style-type: none;
+}
+
+.markdown-body .task-list-item+.task-list-item {
+  margin-top: 3px;
+}
+
+.markdown-body .task-list-item input {
+  margin: 0 .2em .25em -1.6em;
+  vertical-align: middle;
+}
+
+.markdown-body hr {
+  border-bottom-color: #eee;
+}
+
+.markdown-body .pl-0 {
+  padding-left: 0!important;
+}
+
+.markdown-body .pl-1 {
+  padding-left: 4px!important;
+}
+
+.markdown-body .pl-2 {
+  padding-left: 8px!important;
+}
+
+.markdown-body .pl-3 {
+  padding-left: 16px!important;
+}
+
+.markdown-body .pl-4 {
+  padding-left: 24px!important;
+}
+
+.markdown-body .pl-5 {
+  padding-left: 32px!important;
+}
+
+.markdown-body .pl-6 {
+  padding-left: 40px!important;
+}
+
+.markdown-body .pl-7 {
+  padding-left: 48px!important;
+}
+
+.markdown-body .pl-8 {
+  padding-left: 64px!important;
+}
+
+.markdown-body .pl-9 {
+  padding-left: 80px!important;
+}
+
+.markdown-body .pl-10 {
+  padding-left: 96px!important;
+}
+
+.markdown-body .pl-11 {
+  padding-left: 112px!important;
+}
+
+.markdown-body .pl-12 {
+  padding-left: 128px!important;
+}
+
+  </style>
+  <style>
+  /**
+ * prism.js default theme for JavaScript, CSS and HTML
+ * Based on dabblet (http://dabblet.com)
+ * @author Lea Verou
+ */
+
+code[class*="language-"],
+pre[class*="language-"] {
+	color: black;
+	background: none;
+	text-shadow: 0 1px white;
+	font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+	font-size: 1em;
+	text-align: left;
+	white-space: pre;
+	word-spacing: normal;
+	word-break: normal;
+	word-wrap: normal;
+	line-height: 1.5;
+
+	-moz-tab-size: 4;
+	-o-tab-size: 4;
+	tab-size: 4;
+
+	-webkit-hyphens: none;
+	-moz-hyphens: none;
+	-ms-hyphens: none;
+	hyphens: none;
+}
+
+pre[class*="language-"]::-moz-selection, pre[class*="language-"] ::-moz-selection,
+code[class*="language-"]::-moz-selection, code[class*="language-"] ::-moz-selection {
+	text-shadow: none;
+	background: #b3d4fc;
+}
+
+pre[class*="language-"]::selection, pre[class*="language-"] ::selection,
+code[class*="language-"]::selection, code[class*="language-"] ::selection {
+	text-shadow: none;
+	background: #b3d4fc;
+}
+
+@media print {
+	code[class*="language-"],
+	pre[class*="language-"] {
+		text-shadow: none;
+	}
+}
+
+/* Code blocks */
+pre[class*="language-"] {
+	padding: 1em;
+	margin: .5em 0;
+	overflow: auto;
+}
+
+:not(pre) > code[class*="language-"],
+pre[class*="language-"] {
+	background: #f5f2f0;
+}
+
+/* Inline code */
+:not(pre) > code[class*="language-"] {
+	padding: .1em;
+	border-radius: .3em;
+	white-space: normal;
+}
+
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+	color: slategray;
+}
+
+.token.punctuation {
+	color: #999;
+}
+
+.token.namespace {
+	opacity: .7;
+}
+
+.token.property,
+.token.tag,
+.token.boolean,
+.token.number,
+.token.constant,
+.token.symbol,
+.token.deleted {
+	color: #905;
+}
+
+.token.selector,
+.token.attr-name,
+.token.string,
+.token.char,
+.token.builtin,
+.token.inserted {
+	color: #690;
+}
+
+.token.operator,
+.token.entity,
+.token.url,
+.language-css .token.string,
+.style .token.string {
+	color: #9a6e3a;
+	/* This background color was intended by the author of this theme. */
+	background: hsla(0, 0%, 100%, .5);
+}
+
+.token.atrule,
+.token.attr-value,
+.token.keyword {
+	color: #07a;
+}
+
+.token.function,
+.token.class-name {
+	color: #DD4A68;
+}
+
+.token.regex,
+.token.important,
+.token.variable {
+	color: #e90;
+}
+
+.token.important,
+.token.bold {
+	font-weight: bold;
+}
+.token.italic {
+	font-style: italic;
+}
+
+.token.entity {
+	cursor: help;
+}
+
+  </style>
+  <style>
+  
+  </style>
+  <style>
+    .markdown-body {
+      font-family: -apple-system,Segoe UI,Helvetica,Arial,sans-serif,Apple Color Emoji,Segoe UI Emoji;
+      box-sizing: border-box;
+      min-width: 200px;
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 45px;
+    }
+
+    @media not print {
+      .markdown-body {
+        padding: 45px;
+      }
+
+      @media (max-width: 767px) {
+        .markdown-body {
+          padding: 15px;
+        }
+      }
+    }
+
+    .hf-container {
+      color: #24292e;
+      line-height: 1.3;
+    }
+
+    .markdown-body .highlight pre,
+    .markdown-body pre {
+      white-space: pre-wrap;
+    }
+    .markdown-body table {
+      display: table;
+    }
+    .markdown-body img[data-align="center"] {
+      display: block;
+      margin: 0 auto;
+    }
+    .markdown-body img[data-align="right"] {
+      display: block;
+      margin: 0 0 0 auto;
+    }
+    .markdown-body li.task-list-item {
+      list-style-type: none;
+    }
+    .markdown-body li > [type=checkbox] {
+      margin: 0 0 0 -1.3em;
+    }
+    .markdown-body input[type="checkbox"] ~ p {
+      margin-top: 0;
+      display: inline-block;
+    }
+    .markdown-body ol ol,
+    .markdown-body ul ol {
+      list-style-type: decimal;
+    }
+    .markdown-body ol ol ol,
+    .markdown-body ol ul ol,
+    .markdown-body ul ol ol,
+    .markdown-body ul ul ol {
+      list-style-type: decimal;
+    }
+  </style>
+  <style>.markdown-body a.footnote-ref {
+  text-decoration: none;
+}
+
+.footnotes {
+  font-size: .85em;
+  opacity: .8;
+}
+
+.footnotes li[role="doc-endnote"] {
+  position: relative;
+}
+
+.footnotes .footnote-back {
+  position: absolute;
+  font-family: initial;
+  top: .2em;
+  right: 1em;
+  text-decoration: none;
+}
+
+.inline-math.invalid,
+.multiple-math.invalid {
+  color: rgb(255, 105, 105);
+}
+
+.toc-container {
+  width: 100%;
+}
+
+.toc-container .toc-title {
+  font-weight: 700;
+  font-size: 1.2em;
+  margin-bottom: 0;
+}
+
+.toc-container li,
+.toc-container ul,
+.toc-container ul li {
+  list-style: none !important;
+}
+
+.toc-container > ul {
+  padding-left: 0;
+}
+
+.toc-container ul li span {
+  display : flex;
+}
+
+.toc-container ul li span a {
+  color: inherit;
+  text-decoration: none;
+}
+.toc-container ul li span a:hover {
+  color: inherit;
+  text-decoration: none;
+}
+
+.toc-container ul li span span.dots {
+  flex: 1;
+  height: 0.65em;
+  margin: 0 10px;
+  border-bottom: 2px dotted black;
+}
+</style>
+  <style>.markdown-body{}body {counter-reset: h2}
+h2 {counter-reset: h3}
+h3 {counter-reset: h4}
+h4 {counter-reset: h5}
+h5 {counter-reset: h6}
+h2:before {counter-increment: h2; content: counter(h2) ". "}
+h3:before {counter-increment: h3; content: counter(h2) "." counter(h3) ". "}
+h4:before {counter-increment: h4; content: counter(h2) "." counter(h3) "." counter(h4) ". "}
+h5:before {counter-increment: h5; content: counter(h2) "." counter(h3) "." counter(h4) "." counter(h5) ". "}
+h6:before {counter-increment: h6; content: counter(h2) "." counter(h3) "." counter(h4) "." counter(h5) "." counter(h6) ". "}
+h2.nocount:before, h3.nocount:before, h4.nocount:before, h5.nocount:before, h6.nocount:before { content: ""; counter-increment: none }pre.front-matter{display:none!important;}/** Academic **/
+
+/* DejaVu Serif should use 11pt */
+.hf-container,
+.markdown-body {
+  font-family: Georgia,Palatino,"Palatino Linotype","Times New Roman","DejaVu Serif",serif,"Apple Color Emoji","Segoe UI Emoji";
+  font-size: 12pt;
+  line-height: 1.3;
+  color: #212121;
+}
+
+:root {
+  --footerHeaderBorderColor: #1c1c1c;
+}
+.hf-container {
+  font-size: 0.75em;
+}
+.page-header:not(.simple) .hf-container {
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--footerHeaderBorderColor);
+}
+.page-footer:not(.simple) .hf-container {
+  padding-top: 2px;
+  border-top: 1px solid var(--footerHeaderBorderColor);
+}
+
+.footnotes {
+  font-size: 0.75em;
+  opacity: 0.9;
+}
+.footnotes > hr:first-of-type {
+  width: 250px;
+  height: 1px;
+  background: var(--footerHeaderBorderColor);
+}
+.footnotes > ol > li > p {
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  font-weight: 600;
+  color: #282828;
+}
+
+.markdown-body h1 {
+  font-size: 1.8em;
+}
+.markdown-body h2 {
+  font-size: 1.6em;
+}
+.markdown-body h3 {
+  font-size: 1.4em;
+}
+.markdown-body h4,
+.markdown-body h5 {
+  font-size: 1.2em;
+}
+.markdown-body h6 {
+  font-size: 1em;
+}
+
+.markdown-body h1,
+.markdown-body h2 {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.markdown-body a {
+  color: #212121;
+  text-decoration: underline;
+}
+
+.markdown-body hr {
+  background-color: #b0b0b0;
+  height: 1px;
+}
+
+.markdown-body blockquote {
+  border: none;
+  color: #282828;
+  padding: 0 1em;
+  margin-left: 20px;
+}
+
+.markdown-body .highlight pre,
+.markdown-body pre {
+  background-color: #f6f8fa;
+  border: 1px solid #e5e5e5;
+  border-radius: 0;
+}
+
+.markdown-body table td,
+.markdown-body table th {
+  border: 1px solid #1a1a1a;
+  padding: 2px 6px;
+}
+.markdown-body table tr {
+  background: none;
+  border-top: 1px solid #1a1a1a;
+  text-align: left;
+}
+.markdown-body table tr:nth-child(2n) {
+  background: none;
+}
+</style>
+</head>
+<body>
+  <article class="markdown-body"><h1 class="atx" id="vi-przetwarzanie-rozproszone-w-szbd-oracle">VI. Przetwarzanie rozproszone w SZBD Oracle</h1>
+<p>Celem zajęć jest zapoznanie się z własnościami SZBD Oracle umożliwiającymi przetwarzanie rozproszone. Własności te obejmują:</p>
+<ul>
+<li><p>Transparenty dostęp do zdalnych danych.</p>
+</li>
+<li><p>Rozproszone transakcje.</p>
+</li>
+</ul>
+<h2 class="atx" id="utworzenie-baz-danych">Utworzenie baz danych</h2>
+<p>W celu przygotowania środowiska do ilustracji własności przetwarzania rozproszonego należy utworzyć 2 bazy danych. Wykonaj poniższe kroki aby utworzyć dwie bazy danych, jedną o nazwie <em>RBD1</em> i drugą o nazwie <em>RBD2</em>.</p>
+<ol>
+<li><p>Zaloguj się do maszyny wirtualnej jako użytkownik rbd używając hasła RBD#7102.</p>
+</li>
+<li><p>Otwórz okno terminala, który nazwiemy terminalem pomocniczym.</p>
+</li>
+<li><p>Pobierz plik manifestów za pomocą poniższego polecenia:</p>
+<pre><code class="fenced-code-block">wget www.cs.put.poznan.pl/jjezierski/RBDv2/ora1.yaml</code></pre>
+</li>
+<li><p>Otwórz plik manifestów w celu jego przeglądnięcia za pomocą polecenia:</p>
+<pre><code class="fenced-code-block">less ora1.yaml</code></pre>
+</li>
+<li><p>Rozpocznij wdrożenie komponentów z pliku manifestów za pomocą polecenia:</p>
+<pre><code class="fenced-code-block">kubectl apply -f ora1.yaml</code></pre>
+</li>
+<li><p>Obserwuj postęp wdrożenia <em>StatefulSet</em> wykorzystując poniższe polecenie:</p>
+<pre><code class="fenced-code-block">kubectl get sts --watch</code></pre>
+<p>Wdrożenie zajmie chwilę ponieważ obraz kontenera ma objętość ponad 3GiB.</p>
+</li>
+<li><p>Skopiuj plik manifestów do pliku ora2.yaml:</p>
+<pre><code class="fenced-code-block">cp ora1.yaml ora2.yaml</code></pre>
+</li>
+<li><p>Użyj swojego ulubionego edytora tekstu wykonać następujące zmiany w pliku ora2.yaml [Raport]:</p>
+</li>
+</ol>
+<ul>
+<li><p>zamień wszystkie wystąpienia tekstu rbd1 na rbd2,</p>
+</li>
+<li><p>ustal w drugim manifeście wartość klucza spec.ports.port na 1522.</p>
+</li>
+</ul>
+<ol start="5">
+<li><p>Wykonaj wdrożenie zawartości pliku ora2.yaml [Raport].</p>
+</li>
+<li><p>Pobierz skrypty SQL wykonując w terminalu pomocniczym polecenia:</p>
+</li>
+</ol>
+<p>wget <a href="http://www.cs.put.poznan.pl/jjezierski/RBDv2/pracownicy.sql">www.cs.put.poznan.pl/jjezierski/RBDv2/pracownicy.sql</a></p>
+<p>wget <a href="http://www.cs.put.poznan.pl/jjezierski/RBDv2/zespoly.sql">www.cs.put.poznan.pl/jjezierski/RBDv2/zespoly.sql</a></p>
+<ol start="6">
+<li><p>W terminalu pomocniczym skopiuj plik pracownicy.sql do katalogu /opt/oracle/oradata repliki ora-rbd1-0. Użyj poniższego polecenia:</p>
+<pre><code class="fenced-code-block">kubectl cp pracownicy.sql ora-rbd1-0:/opt/oracle/oradata</code></pre>
+</li>
+<li><p>W terminalu pomocniczym skopiuj plik zespoly.sql do katalogu /opt/oracle/oradata repliki ora-rbd2-0. Użyj poniższego polecenia:</p>
+<pre><code class="fenced-code-block">kubectl cp zespoly.sql ora-rbd2-0:/opt/oracle/oradata</code></pre>
+</li>
+<li><p>Otwórz dwie kolejne zakładki terminala o nazwach ora-rbd1-0 i ora-rbd2-0. Pierwszy terminal o nazwie <em>rbd1</em> będzie służył do operowania na bazie danych <em>rbd1</em>, natomiast drugi terminal o nazwie <em>rbd2</em> będzie wykorzystywany do wykonywania operacji na bazie danych <em>rbd2</em>.</p>
+</li>
+<li><p>W terminalu ora-rbd1-0 wykonaj poniższe polecenie aby uruchomić powłokę w replice ora-rbd1-0. Replika ta będzie obsługiwać bazę danych, którą będziemy dalej nazywać rbd1.</p>
+<pre><code class="fenced-code-block">kubectl exec -it ora-rbd1-0 -- /bin/bash</code></pre>
+</li>
+<li><p>W powłoce repliki zrób kopie zapasowe plików konfiguracyjnych:</p>
+<pre><code class="fenced-code-block">cp -R /opt/oracle/oradata/dbconfig /opt/oracle/oradata/dbconfig.bak</code></pre>
+</li>
+<li><p>W terminalu <em>rbd1</em> dopisz do pliku <em>tnsnames.ora</em> deskryptor połączenia do bazy danych <em>rbd1</em> i <em>rbd2</em>:</p>
+<pre><code class="fenced-code-block">cat &lt;&lt;EOT&gt;&gt; /opt/oracle/oradata/dbconfig/XE/tnsnames.ora
+RBD1 =(DESCRIPTION = (ADDRESS_LIST =
+  (ADDRESS = (PROTOCOL = TCP)(HOST = ora-rbd1-lb)(PORT = 1521)))
+  (CONNECT_DATA =(SERVICE_NAME = XEPDB1)))
+RBD2 =(DESCRIPTION = (ADDRESS_LIST =
+  (ADDRESS = (PROTOCOL = TCP)(HOST = ora-rbd2-lb)(PORT = 1522)))
+  (CONNECT_DATA =(SERVICE_NAME = XEPDB1)))
+EOT</code></pre>
+</li>
+<li><p>W terminalu <em>rbd1</em> sprawdź komunikację procesami nasłuchu (ang. listner) baz danych RBD1 i RBD2:</p>
+<pre><code class="fenced-code-block">tnsping RBD1
+tnsping RBD2</code></pre>
+</li>
+<li><p>W terminalu rbd1 przetestuj za pomocą narzędzia <code>sqlplus</code> zdalne przyłączenie do bazy danych RBD2:</p>
+<pre><code class="fenced-code-block">sqlplus system/rbd2\@RBD2</code></pre>
+<p>Opuść narzędzie sqlplus za pomocą polecenia <code>exit</code>.</p>
+</li>
+<li><p>W terminalu rbd1 przyłącz się za pomocą narzędzia sqlplus do bazy danych RBD1:</p>
+<pre><code class="fenced-code-block">sqlplus system/rbd1\@RBD1</code></pre>
+</li>
+<li><p>W bazie danych <em>rbd1</em> utwórz użytkownika <em>rbd</em> z hasłem <em>RBD#7102</em>:</p>
+<pre><code class="fenced-code-block">create user rbd identified by \"RBD#7102\"\
+quota unlimited on users;
+grant dba to rbd;</code></pre>
+</li>
+<li><p>W bazie danych <em>rbd1</em> przełącz się na użytkownika <em>rbd</em>:</p>
+<pre><code class="fenced-code-block">connect rbd/RBD#7102\@rbd1</code></pre>
+</li>
+<li><p>Wykonaj odpowiednio zmodyfikowane kroki od 6 do 16 dla bazy danych RBD2. Zwróć uwagę, że loadbalancer dla usługi bazy danych RBD1 nasłuchuje na porcie 1521.</p>
+</li>
+</ol>
+<h2 class="atx" id="transparentny-dostep-do-zdalnych-danych">Transparentny dostęp do zdalnych danych</h2>
+<p>Celem tego punktu jest zaprezentowanie mechanizmów dostępu do zdalnych danych za pomocą łączników bazy danych oraz synonimów celu zapewnienia transparentnego dostępu do danych.</p>
+<ol>
+<li><p>W bazie danych <em>rbd1</em> utwórz tabelę <em>pracownicy</em> uruchamiając skrypt w narzędziu <em>psql</em> poleceniem @ /opt/oracle/oradata/pracownicy.sql.</p>
+</li>
+<li><p>W bazie danych <em>rbd2</em> utwórz tabelę <em>zespoly</em> uruchamiając skrypt /opt/oracle/oradata/zespoly.sql.</p>
+</li>
+<li><p>Utwórz w bazie danych <em>rbd1</em> <a href="http://docs.oracle.com/database/121/SQLRF/statements_5006.htm#SQLRF01205">łącznik do bazy
+danych</a>
+<em>rbd2</em> za pomocą poniższego polecenia:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">CREATE</span> <span class="token keyword">DATABASE</span> LINK RBD\<span class="token variable">@RBD2</span>
+<span class="token keyword">CONNECT</span> <span class="token keyword">TO</span> rbd IDENTIFIED <span class="token keyword">BY</span> RBD<span class="token comment">#7102</span>
+<span class="token keyword">USING</span> <span class="token string">'rbd2'</span><span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>W bazie danych <em>rbd1</em> wykonaj poniższe polecenie testujące zdalny
+dostęp do tabeli <em>zespoly</em>:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">SELECT</span> \<span class="token operator">*</span> <span class="token keyword">FROM</span> zespoly\<span class="token variable">@RBD</span>\<span class="token variable">@RBD2</span><span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>W bazie danych <em>rbd1</em> utwórz <a href="http://docs.oracle.com/database/121/SQLRF/statements_7001.htm#SQLRF01401">synonim</a> do zdalnej tabeli <em>zespoly:</em></p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">CREATE</span> SYNONYM zespoly <span class="token keyword">FOR</span> zespoly\<span class="token variable">@RBD</span>\<span class="token variable">@RBD2</span><span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>W bazie danych <em>rbd1</em> przetestuj transparentny dostęp do tabeli
+<em>zespoly</em>:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">SELECT</span> nazwisko<span class="token punctuation">,</span> nazwa <span class="token keyword">FROM</span> pracownicy <span class="token keyword">natural</span> <span class="token keyword">join</span> zespoly<span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>Utwórz w bazie danych RBD2 odpowiednie obiekty umożliwiające zdalny dostęp do tabeli <em>pracownicy</em> znajdującej się w bazie danych RBD1. [Raport]</p>
+</li>
+</ol>
+<h2 class="atx" id="rozproszone-transakcje">Rozproszone transakcje</h2>
+<p>Celem zadania jest przedstawienie rozproszonych transakcji, czyli takich
+transakcji, które modyfikują dane więcej niż w jednej bazie danych. System Oracle do zapewnienia atomowości operacji zatwierdzenia transakcji wykorzystuje Two Phase Commit (2PC) z pewną modyfikacją. Modyfikacja ta polega na wprowadzeniu wyróżnionego węzła zatwierdzania transakcji (ang. commit point site). Zapoznaj się z dokumentacją
+dotyczącą <a href="https://docs.oracle.com/database/121/ADMIN/ds_txns.htm#ADMIN-GUID-51F21E1B-B735-48DC-8500-94DACAA863A0">węzła zatwierdzania</a>.</p>
+<h3 class="atx" id="rozproszona-transakcja-zakonczona-sukcesem">Rozproszona transakcja zakończona sukcesem</h3>
+<ol>
+<li><p>W terminalu <em>rbd1</em> za pomocą narzędzia <em>sqlplus</em> wykonaj w bazie danych RBD1 poniższą transakcję rozproszoną:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">update</span> zespoly <span class="token keyword">set</span> adres<span class="token operator">=</span><span class="token string">'PIOTROWO 1'</span><span class="token keyword">where</span> id_zesp<span class="token operator">=</span><span class="token number">10</span><span class="token punctuation">;</span>
+<span class="token keyword">update</span> pracownicy <span class="token keyword">set</span> placa_pod<span class="token operator">=</span><span class="token number">999</span> <span class="token keyword">where</span> id_prac<span class="token operator">=</span><span class="token number">100</span><span class="token punctuation">;</span>
+<span class="token keyword">commit</span><span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>Sprawdź w terminalu rbd2 stan tabel <em>pracownicy</em> i <em>zespoly</em>. Czy posiadają one zmiany wprowadzone przez transakcję z poprzedniego punktu? [Raport]</p>
+</li>
+</ol>
+<h3 class="atx" id="rozproszona-transakcja-zakonczona-awaria">Rozproszona transakcja zakończona awarią</h3>
+<p>System Oracle posiada narzędzie diagnostycznych w celu wywołania awarii podczas wykonywania operacji COMMIT. Do tego celu służy polecenie <code>commit comment 'ORA-2PC-CRASH-TEST-n'</code>, gdzie n przybiera następujące wartości:
+| Syntax | Description |
+| ----------- | ----------- |
+| Header | Title |
+| Paragraph | Text | </p>
+<ol>
+<li><p>Crash commit point site after collect</p>
+</li>
+<li><p>Crash non-commit point site after collect</p>
+</li>
+<li><p>Crash before prepare (non-commit point site)</p>
+</li>
+<li><p>Crash after prepare (non-commit point site)</p>
+</li>
+<li><p>Crash commit point site before commit</p>
+</li>
+<li><p>Crash commit point site after commit</p>
+</li>
+<li><p>Crash non-commit point site before commit</p>
+</li>
+<li><p>Crash non-commit point site after commit</p>
+</li>
+<li><p>Crash commit point site before forget</p>
+</li>
+<li><p>Crash non-commit point site before forget</p>
+</li>
+<li><p>W bazie danych <em>RBD1</em> wykonaj rozproszoną transakcję:</p>
+</li>
+</ol>
+<p>update zespoly set adres='PIOTROWO 2'where id_zesp=10;</p>
+<p>update pracownicy set placa_pod=888 where id_prac=100;</p>
+<p>commit comment 'ORA-2PC-CRASH-TEST-4'</p>
+<ol start="2">
+<li><p>W bazie danych <em>RBD2</em> stan tabel <em>pracownicy</em> i <em>zespoly</em>. Czy
+posiadają one zmiany wprowadzone przez transakcję z poprzedniego
+punkty? Dlaczego? [Raport]</p>
+</li>
+<li><p>W bazie danych <em>RBD1</em> wykonaj rozproszoną transakcję:</p>
+</li>
+</ol>
+<p>update zespoly set adres='PIOTROWO 3'where id_zesp=10;</p>
+<p>update pracownicy set placa_pod=777 where id_prac=100;</p>
+<p>commit comment 'ORA-2PC-CRASH-TEST-6'</p>
+<ol start="4">
+<li><p>W bazie danych <em>RBD2</em> stan tabel <em>pracownicy</em> i <em>zespoly</em>. Czy
+posiadają one zmiany wprowadzone przez transakcję z poprzedniego
+punktu? Dlaczego? [Raport]</p>
+<ol>
+<li><h3 class="atx" id="rozproszona-transakcja-zakonczona-awaria----reczne-odtwarzanie">Rozproszona transakcja zakończona awarią -- ręczne odtwarzanie</h3>
+</li>
+</ol>
+</li>
+</ol>
+<p>W scenariuszach awarii z poprzedniego punktu, skutki awarii były
+automatycznie naprawiane. W taki sposób system będzie się zachowywał gdy
+zostanie przywrócona komunikacja między uczestnikami rozproszonej
+transakcji. W ramach poniższych scenariuszy awarii, komunikacja między
+uczestnikami transakcji nie będzie przywrócona i wystąpi potrzeba
+ręcznego odtworzenia transakcji.</p>
+<ol>
+<li>W bazie danych <em>RBD1</em> ustaw parametr COMMIT_POINT_STRENGTH:</li>
+</ol>
+<p>alter system set COMMIT_POINT_STRENGTH=10 scope=spfile;</p>
+<ol start="2">
+<li>W bazie danych <em>RBD2</em> ustaw parametr COMMIT_POINT_STRENGTH:</li>
+</ol>
+<p>alter system set COMMIT_POINT_STRENGTH=20 scope=spfile;</p>
+<ol start="3">
+<li>Zrestartuj bazę danych <em>RBD1</em> wykonując w terminalu pomocniczym
+następujące polecenie:</li>
+</ol>
+<p>kubectl rollout restart sts ora-rbd1</p>
+<ol start="4">
+<li><p>Nawiąż ponownie połączenie do bazy danych RBD1 z wykorzystaniem
+terminala ora-rdb1-0 i programu sqlplus. Użyj danych
+uwierzytelnienia użytkownika rbd. Nie zapomnij o ustawieniu
+zmiennych środowiskowych.</p>
+</li>
+<li><p>Zastosuj odpowiednio poprzednie 2 punkty dla bazy danych RBD2.</p>
+</li>
+<li><p>Która baza danych będzie węzłem zatwierdzania rozproszonych
+transakcji? Dlaczego? [Raport]</p>
+</li>
+<li><p>W bazie danych <em>RBD1</em> wyłącz automatyczne odtwarzanie transakcji,
+które zakończyły się awarią, tę operację trzeba będzie wykonać w
+bazie danych XE, która jest kontenerem dla bazy danych RDB1:</p>
+</li>
+</ol>
+<p>connect system/rbd1@XE</p>
+<p>ALTER SYSTEM DISABLE DISTRIBUTED RECOVERY;</p>
+<p>connect rbd/RBD#7102@rbd1</p>
+<ol start="8">
+<li><p>W bazie danych <em>RBD2</em> wyłącz automatyczne odtwarzanie transakcji.</p>
+</li>
+<li><p>W bazie danych <em>RBD1</em> wykonaj rozproszoną transakcję, zakończoną
+symulacją błędu w trakcie wykonywania algorytmu 2PC:</p>
+</li>
+</ol>
+<p>update zespoly set adres='PIOTROWO 4'where id_zesp=10;</p>
+<p>update pracownicy set placa_pod=666 where id_prac=100;</p>
+<p>commit comment 'ORA-2PC-CRASH-TEST-4'</p>
+<ol start="10">
+<li><p>W bazie danych <em>RBD2</em> sprawdź informację o zespole 10. [Raport]</p>
+</li>
+<li><p>W bazie danych <em>RBD1</em> spróbuj zmodyfikować informację o
+pracowniku 100. (To już będzie nowa transakcja, poprzednia została
+zatwierdzona.) Co się stało? Dlaczego? [Raport]</p>
+</li>
+<li><p>Wycofaj nieudane zmiany z poprzedniego punktu.</p>
+</li>
+<li><p>W bazie danych <em>RBD1</em> wyświetl niedokończone rozproszone transakcje.</p>
+</li>
+</ol>
+<p>select LOCAL_TRAN_ID, GLOBAL_TRAN_ID, STATE from DBA_2PC_PENDING;</p>
+<ol start="14">
+<li>W bazie danych <em>RBD1</em> wyświetl uczestników rozproszonej transakcji.</li>
+</ol>
+<p>select LOCAL_TRAN_ID, INTERFACE, DATABASE from DBA_2PC_NEIGHBORS;</p>
+<ol start="15">
+<li><p>Sprawdź w dokumentacji jakie dane są wyświetlane w kolumnie
+INTERFACE i co oznaczają w kontekście interesującej transakcji.
+[Raport]</p>
+</li>
+<li><p>Wykonaj punkty 13 i 14 w bazie danych <em>RBD2</em>.</p>
+</li>
+<li><p>Należy wycofać zmiany rozproszonej transakcji. Dlaczego? [Raport]</p>
+</li>
+<li><p>W bazie danych <em>rbd1</em> wycofaj lokalną część rozproszonej transakcji.
+[Uwaga]{.underline}: użyj odpowiedniego identyfikatora lokalnej
+transakcji.</p>
+</li>
+</ol>
+<p>rollback force '6.29.817'</p>
+<ol start="19">
+<li><p>Wykonaj punkty 13 i 14 jeszcze raz w bazie danych <em>RBD2</em>.</p>
+</li>
+<li><p>W bazie danych <em>RBD1</em> spróbuj zmodyfikować informację
+pracowniku 100. Co się stało? Dlaczego? [Raport]</p>
+</li>
+<li><p>Czy istnieje potrzeba wykonania kroku 17 w bazie danych RBD2?
+Dlaczego? [Raport]</p>
+</li>
+<li><p>Zrealizuj powyższy scenariusz dla awarii <em>Crash commit point site
+after commit</em>. [Raport]</p>
+</li>
+<li><p>W obu bazach danych włącz automatyczne odtwarzanie rozproszonych
+transakcji.</p>
+</li>
+</ol>
+</article>
+</body>
+</html>

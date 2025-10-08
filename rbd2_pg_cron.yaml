@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: pgsql-rbd2
+spec:
+  serviceName: pgsql-rbd2-service
+  selector:
+    matchLabels:
+      app: pgsql-rbd2
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: pgsql-rbd2
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: k3d-rbdcluster-server-1
+      containers:
+        - name: pgsql-rbd2
+          image: rbd/postgres13
+          volumeMounts:
+            - name: pgsql-rbd2-disk
+              mountPath: /data
+          env:
+            - name: POSTGRES_PASSWORD
+              value: rbd2
+            - name: PGDATA
+              value: /data/pgdata
+  volumeClaimTemplates:
+    - metadata:
+        name: pgsql-rbd2-disk
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 25Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgsql-rbd2-service
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 5433
+    targetPort: 5432
+  selector:
+    app: pgsql-rbd2
