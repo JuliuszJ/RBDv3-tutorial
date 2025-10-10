@@ -452,9 +452,9 @@ sudo chmod 644 /etc/apt/sources.list.d/kubernetes.list
         <li>
             Pobierz skrypty SQL wykonując w terminalu pomocniczym
             polecenia:
-            <pre><code>wget www.cs.put.poznan.pl/jjezierski/RBDv3/pracownicy.sql
-                wget www.cs.put.poznan.pl/jjezierski/RBDv3/zespoly.sql
-            </code></pre>
+<pre><code>wget www.cs.put.poznan.pl/jjezierski/RBDv3/pracownicy.sql
+    wget www.cs.put.poznan.pl/jjezierski/RBDv3/zespoly.sql
+</code></pre>
         </li>
         <li>
             W bazie danych <em>RBD1</em> utwórz tabelę <em>pracownicy</em>
@@ -869,6 +869,10 @@ commit;
             transakcja została zatwierdzona. W ten sposób potwierdziliśmy, że
             implementacja protokołu 2PC wykonana w rozszerzeniu pg_fwd_plus działa
             poprawnie w przetestowanym scenariuszu awarii.
+        </li>
+        <li> <strong> Wyłącz parametr <em>postgres_fdw.skip_commit_phase.</em></strong>
+             W tym celu w terminalu rbd1 za pomocą narzędzia psql wykonaj następujące polecenie: 
+            <pre><code>set postgres_fdw.skip_commit_phase=false;</code></pre>
         </li>
 
     </ol>

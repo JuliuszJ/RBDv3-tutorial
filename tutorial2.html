@@ -1,0 +1,798 @@
+<article class="tutorial">
+    <h1 id="ii.-fragmentaryzacja-pozioma-w-szbd-postgres">
+        II. Fragmentaryzacja pozioma w SZBD Postgres</h1>
+    <p>
+        Celem zajęć jest zapoznanie się z własnościami SZBD Postgres
+        umożliwiającymi <a
+            href="https://www.projectmanagement.com/process/popup.cfm?ID=23459&amp;techKid=1">fragmentaryzację
+            poziomą tabel</a> (ang. <a href="https://en.wikipedia.org/wiki/Shard_(database_architecture)">sharding</a>).
+    </p>
+
+    <h2 id="przygotowanie-środowiska">Przygotowanie środowiska</h2>
+    <p>
+        Funkcjonalność fragmentaryzacji poziomej w SZBD Postgres jest
+        zapewniana przez rozszerzenie o nazwie <a href="https://www.citusdata.com/">Citus</a>. Zapoznaj się z <a
+            href="https://docs.citusdata.com/en/latest/aboutcitus/what_is_citus.html">ogólnymi
+            informacjami o tym rozszerzeniu</a>. Rozszerzenie to jest rozwijane
+        przez niezależną firmę, która została wykupiona przez Microsoft, w
+        związku z tym nie jest domyślnie instalowane wraz z oprogramowaniem SZBD
+        Postgres i należy je doinstalować lub skorzystać z gotowego obrazu.
+        Wykorzystamy to drugie rozwiązanie. W celu przygotowania środowiska do
+        dalszej pracy wykonaj poniższe punkty:
+    </p>
+    <ol>
+        <li>
+            Zaloguj się do maszyny wirtualnej jako użytkownik <em>rbd</em> używając
+            hasła <em>rbd#2502</em>.
+        </li>
+        <li>
+            Otwórz okno terminala, który nazwiemy terminalem
+            pomocniczym.
+        </li>
+        <li>
+            W pierwszym kroku pobierz plik manifestów za pomocą poniższego
+            polecenia:
+            <pre><code>wget www.cs.put.poznan.pl/jjezierski/RBDv3/rbd-citus.yaml</code></pre>
+        </li>
+        <li>
+            <p>
+                Otwórz plik manifestów w celu jego przeglądnięcia za pomocą
+                polecenia:
+                <pre><code>less rbd-citus.yaml</code></pre>
+                Zawartość tego pliku jest zbliżona do pliku manifestów z poprzedniego
+                tutorialu. W pierwszym manifeście, który opisuje StatefulSet za pomocą
+                klucza <em>spec.template.spec.containters.image</em> wskazano na obraz
+                systemu Postgres z zainstalowanym rozszerzeniem Citus. Klucz
+                <em>spec.template.spec.containters.env</em> został wykorzystany do
+                przekazania wartości zmiennych środowiskowych umożliwiających
+                konfigurację kontenera. Zmienna POSTGRES_HOST_AUTH_METHOD ustawiona na
+                wartość <em>trust</em> umożliwia wykonywanie połączeń do bazy danych bez
+                uwierzytelnienia. Ta metoda jest niezalecana dla systemów produkcyjnych,
+                w takich systemach należy skonfigurować uwierzytelnienie połączeń za
+                pomocą pliku <em>pg_hba.conf</em>.
+            </p>
+            
+            <p>
+                Na końcu pliku umieszczono dodatkowy manifest, który opisuje
+                kontroler typu bezgłowa usługa (ang. headless Service). Jego nazwa
+                pochodzi od wartości klucza <em>spec.ClusterIP</em>, która jest
+                ustawiona na <em>None</em>. Zadaniem tego kontrolera jest dostarczenie
+                nazw domenowych dla wdrożonych replik <em>Pod</em>, które pasują do
+                wartości klucza <em>spec.selector</em> tego kontrolera. Nazwy te będą
+                dostępne wewnątrz klastra Kubernetes. Kubernetes stosuje następującą
+                konwencję nazw domenowych
+                <em>nazwa-repliki-Pod.nazwa-kontrolera.przestrzeń-nazw</em>.svc.cluster.local
+                W związku z tym, że nie umieszczaliśmy naszych obiektów w żadnej
+                przestrzeni nazw (ang. Namespace), to zostały one umieszczone w
+                domyślnej przestrzeni nazw (<em>default</em>), przykładowa pełna nazwa
+                domenowa pierwszej repliki będzie następująca:
+                pgsql-citus-sts-0.pgsql-rbd-citus.default.svc.cluster.local.
+            </p>
+            
+            <p>Opuść program <em>less</em> wybierając przycisk <em>q</em>.</p>
+        </li>
+        <li>
+            Rozpocznij wdrożenie komponentów z pliku manifestów za pomocą
+            polecenia:
+            <pre><code>kubectl apply -f rbd-citus.yaml</code></pre>
+        </li>
+        <li>
+            Obserwuj postęp wdrożenia <em>StatefulSet</em> wykorzystując
+            poniższe polecenie:
+            <pre><code>kubectl get sts --watch</code></pre>
+            Wdrożenie wymaga pobrania obrazu kontenera z repozytorium Docker, w
+            związku z tym zajmuje chwilę. Wdrożenie zakończy się w momencie
+            pojawienia się na terminalu wiersza, w którym liczba działających replik
+            będzie równa liczbie żądanych replik, np.:<br />
+            <blockquote>pgsql-citus-sts <mark>3</mark>/3 1m</blockquote>
+            W tym momencie przerwij wykonanie polecenia wykorzystując kombinację
+            Ctrl-c.
+            Wyświetl <em>Pod</em>, które zostały utworzone do obsługi replik
+            <em>StatefulSet</em>, wykorzystaj następujące polecenie:
+            
+            <pre><code>kubectl get pods -l app=pgsql-rbd-citus</code></pre>
+        </li>
+        <li>
+            Otwórz trzy kolejne zakładki w oknie terminala.
+
+            Nazwij te zakładki nazwami kolejnych replik od <em>pgsql-citus-sts-0</em>
+            do <em>pgsql-citus-sts-2</em>, w tym celu uruchom w każdej zakładce poniższe
+            polecenie, gdzie X oznacza numer repliki od 0 do 2.
+            <pre><code>PS1="&#92;[\e]0;pgsql-citus-sts-X&#92;a&#92;]\u@\h:\w$ "</code></pre>
+        </li>
+        <li>
+            W terminalach <em>pgsql-citus-sts-1</em> i <em>pgsql-citus-sts-2</em> będziemy
+            wykonywać operacje na bazach danych uruchomionych w replikach
+            <em>pgsql-citus-sts-1</em> i <em>pgsql-citus-sts-2</em>. Bazy te będą służyć do
+            przechowywania fragmentów poziomych danych (ang. shard). W terminalu
+            <em>pgsql-citus-sts-0</em> będziemy wykonywać operacje na bazie danych
+            uruchomionej w replice <em>pgsql-citus-sts-0</em>. Baza ta będzie służyć do
+            rozpraszania danych między różne fragmenty i koordynowania poleceń SQL
+            kierowanych do rozproszonych poziomo fragmentów.
+        </li>
+    </ol>
+    <h2 id="przygotowanie-schematu-danych-i-załadowanie-danych-do-klastra-baz-danych">Przygotowanie
+        schematu danych i załadowanie danych do klastra baz danych</h2>
+    <p>
+        Przykładowe dane opisują pomiary temperatury i są zgromadzone w 3
+        tabelach: <em>organizations</em>, <em>loggers</em>,
+        <em>measurements</em>. Rejestratory temperatury (ang. logger) należą do
+        określonej organizacji, zaś pomiary temperatury (ang. measurements) są
+        zbierane przez określone rejestratory.
+    </p>
+
+    <p>
+        Dane te zostaną rozproszone w poszczególnych bazach danych tworzących
+        klaster Citus, składającym się z jednego węzła koordynatora i wielu
+        węzłów roboczych. Kluczowym krokiem z punkty widzenia użyteczności i
+        wydajności mechanizmu fragmentaryzacji poziomej danych na węzły robocze
+        jest wybór kryterium rozpraszania. Kryterium tym powinna być kolumna lub
+        zbiór kolumn, która dzieli dane na logicznie rozłączne zbiory. W
+        przypadku przykładowych danych jest to identyfikator organizacji. Jest
+        to typowy wybór dla aplikacji udostępniającej usługi typu <a
+            href="https://pl.wikipedia.org/wiki/Software_as_a_Service"><em>Software
+                as a Service</em></a>, gdzie dobrym kryterium rozpraszania jest
+        identyfikator klienta takiej usługi. Rozszerzenie Citus wymaga
+        denormalizacji schematu bazy danych tak aby wszystkie tabele, które będą
+        fragmentaryzowane poziomo zawierały kryterium rozpraszania. Dodatkowo,
+        kryterium rozpraszania powinno wchodzić w skład klucza podstawowego
+        takich tabel.
+    </p>
+    <ol>
+        <li>
+            W terminalu pomocniczym pobierz i rozkompresuj schemat oraz
+            przykładowe dane:
+<pre><code>wget https://www.cs.put.poznan.pl/jjezierski/RBDv3/loggers.zip
+unzip loggers.zip
+</code></pre>
+</li>
+        <li>
+            Zapoznaj się ze schematem przykładowych danych znajdującym się w
+            pliku <code>~/loggers/loggers.sql</code>. Zwróć uwagę na definicję kluczy
+            podstawowych oraz obcych.
+        </li>
+        <li>
+            Skopiuj katalog <em>loggers</em> do katalogu <em>/data</em>
+            repliki pgsql-citus-sts-0.<br />
+            Użyj poniższego polecenia:
+            <p>kubectl cp loggers pgsql-citus-sts-0:/data</p>
+        </li>
+        <li>
+            W terminalu pgsql-citus-sts-0 wykonaj poniższe polecenie aby
+            uruchomić powłokę w replice pgsql-citus-sts-0. Replika ta będzie
+            obsługiwać węzeł koordynatora klastra Citus.
+            <p>kubectl exec -it pgsql-citus-sts-0 -- /bin/bash</p>
+        </li>
+        <li>
+            W tym samym terminalu uruchom narzędzie <em>psql</em> w celu
+            przyłączenia się do bazy danych koordynatora, wykorzystaj następujące
+            polecenie:
+            <pre><code>psql -U postgres</code></pre>
+        </li>
+        <li>
+            Analogicznie jak punkcie 4, w zakładkach pgsql-citus-sts-1 i
+            pgsql-citus-sts-2 uruchom powłoki replik pgsql-citus-sts-1 i
+            pgsql-citus-sts-2.
+        </li>
+        <li>
+            Tak samo jak punkcie 5, w zakładkach pgsql-citus-sts-1 i
+            pgsql-citus-sts-2 uruchom narzędzie <em>psql</em> w celu przyłączenia
+            się do baz danych węzłów roboczych klastra Citus.
+        </li>
+        <li>
+            W narzędziu <em>psql</em> repliki pgsql-citus-sts-0 wskaż na
+            koordynatora klastra Citus wykonując poniższe polecenie:
+            <pre><code>SELECT citus_set_coordinator_host('pgsql-citus-sts-0.pgsql-rbd-citus', 5432);</code></pre>
+        </li>
+        Zauważ, że użyto tylko początkowy fragment nazwy domenowej. Jest to
+        możliwe dzięki temu, że Kubernetes wstrzyknął do kontenera plik
+        /etc/resolve.conf o następującej zawartości (sprawdź to
+        samodzielnie)
+        <blockquote>
+<pre>
+search default.svc.cluster.local svc.cluster.local cluster.local
+nameserver …
+options ndots:5
+</pre>
+        </blockquote>
+        Za przeszukiwanie domen odpowiedzialna jest dyrektywa
+        <em>search.</em>
+
+        <li>
+            W bazie danych koordynatora skonfiguruj klaster baz danych
+            dołączając do niego bazy danych węzłów roboczych. W tym celu wykorzystaj
+            poniższe polecenia:
+<pre><code>SELECT * from citus_add_node('pgsql-citus-sts-1.pgsql-rbd-citus', 5432);
+SELECT * from citus_add_node('pgsql-citus-sts-2.pgsql-rbd-citus', 5432);
+</code></pre>
+</li>
+        <li>
+            Sprawdź poprawność wykonania poprzedniego kroku przez wydanie w
+            bazie koordynatora polecenia:
+            <pre><code>select * from citus_get_active_worker_nodes();</code></pre>
+        </li>
+        <li>
+            Utwórz w koordynatorze obiekty ze skryptu loggers.sql, wykonując
+            w terminalu pgsql-citus-sts-0 poniższe polecenie:
+            <pre><code>\i /data/loggers/loggers.sql</code></pre>
+        </li>
+        <li>
+            W bazie danych koordynatora, z wykorzystaniem funkcji <a
+                href="https://docs.citusdata.com/en/latest/reference/user_defined_functions.html#create-distributed-table"><em>create_distributed_table</em></a>,
+            zdefiniuj fragmentaryzację tabeli <em>organizations</em>:
+            <pre><code>SELECT create_distributed_table('organizations', 'or_id');</code></pre>
+        </li>
+        <li>
+            W bazie danych koordynatora, zdefiniuj fragmentaryzację tabeli
+            <em>loggers</em>, zwróć uwagę na parametr <em>colocate_with</em>, który
+            umożliwia rozproszenie wierszy tabeli loggers w taki sposób aby każdy
+            wiersz tej tabeli został umieszczony w tym samym węźle co wiersz
+            opisujący organizację, do której należy dany rejestrator:
+
+        </li>
+        <pre><code>SELECT create_distributed_table('loggers', 'lo_or_id', colocate_with => 'organizations');</code></pre>
+        <li>
+            W bazie danych koordynatora, zdefiniuj fragmentaryzację tabeli
+            <em>measurements,</em> nie zapomnij o kolokacji z tabelą
+            <em>organizations.</em> <mark>[Raport]</mark>
+
+        </li>
+        <li>
+            W bazie danych koordynatora załaduj dane do przykładowych
+            tabel:
+<pre><code>\i /data/loggers/organizations.dmp
+\i /data/loggers/loggers.dmp
+\i /data/loggers/measurements.dmp
+</code></pre>
+        </li>
+        <li>
+            Policz poziome fragmenty rozproszonych tabel, w tym celu wykonaj
+            w bazie koordynatora poniższe zapytanie.
+<pre><code>SELECT table_name, count(*)
+FROM citus_shards
+GROUP BY table_name;
+</code></pre>
+        </li>
+        <li>
+            Przeglądnij alokację przykładowych fragmentów tabeli
+            <em>measurements</em>, w tym celu wykonaj w bazie koordynatora poniższe
+            zapytanie.
+         
+<pre><code>SELECT shardid, shard_name, nodename
+FROM citus_shards
+WHERE table_name = 'measurements'::regclass
+ORDER BY shardid
+LIMIT 10;
+</code></pre>
+            Czy fragmenty zostały zaalokowane w bazie danych koordynatora?
+            <mark>[Raport]</mark>
+        </li>
+        <li>
+            Nazwy fragmentów z wyniku powyższego zapytania są nazwami
+            fizycznych tabel w bazach danych węzłów roboczych i można przeglądać ich
+            zawartość w tych węzłach z wykorzystaniem polecenia SELECT. Wykorzystamy
+            tę własność i policzymy liczbę wierszy w wybranych fragmentach tabeli
+            <em>measurements</em> w bazie danych węzła roboczego
+            <em>pgsql-citus-sts-1</em>. W tym celu uruchom poniższe polecenie w
+            narzędziu <em>psql</em> węzła roboczego
+            <em>pgsql-citus-sts-1</em>.
+
+<pre><code>SELECT format(
+    'SELECT ''%I'' AS shard_name, count(*) AS row_count FROM %I;',
+    shard_name,
+    shard_name
+)
+FROM citus_shards
+WHERE table_name = 'measurements'::regclass
+    and nodename= 'pgsql-citus-sts-1.pgsql-rbd-citus'
+ORDER BY shardid
+LIMIT 5
+\gexec
+</code></pre>
+                Czy wiersze tabeli <em>measurements</em> zostały równomiernie
+                rozproszone między fragmenty? Dlaczego? <mark>[Raport]</mark>
+            </li>
+        <li>
+            W bazie danych koordynatora sprawdź możliwość modyfikacji wierszy
+            rozproszonych na poszczególne bazy danych klastra:
+            <pre><code>UPDATE loggers SET lo_description='Fridge #23' where lo_id=622 and lo_or_id=138;</code></pre>
+        </li>
+    </ol>
+    <h2 id="optymalizacja-zapytań-kierowanych-do-fragmentaryzowanych-poziomo-tabel">Optymalizacja
+        zapytań kierowanych do fragmentaryzowanych poziomo tabel</h2>
+    <p>
+        W tym punkcie zostanie sprawdzony sposób optymalizacji poleceń SQL,
+        które są kierowane do tabel fragmentaryzowanych poziomo.
+    </p>
+    <ol>
+        <li>
+            W bazie danych koordynatora wydaj poniższe zapytanie, zwróć
+            uwagę, że w warunku połączeniowym znajduje się odniesienie do kryterium
+            rozpraszania:
+<pre><code>select lo_description, me_time, me_temperature
+from loggers join measurements on (lo_id=me_lo_id and lo_or_id=me_or_id)
+where me_time between timestamp '2017-03-15 08:13' and timestamp '2017-03-15 09:18'
+order by me_time;
+</code></pre>
+        </li>
+
+        <li>
+            Sprawdź plan wykonania powyższego zapytania:
+<pre><code>EXPLAIN select lo_description, me_time, me_temperature
+from loggers join measurements on (lo_id=me_lo_id and lo_or_id=me_or_id)
+where me_time between timestamp '2017-03-15 08:13' and timestamp '2017-03-15 09:18'
+order by me_time;
+</code></pre>
+            Na ile zadań zostało podzielone zapytanie? Jaki jest szacowany koszt
+            wykonania jednego zadania? <mark>[Raport]</mark>
+        </li>
+        <li>
+            Wydaje, że można uzyskać wzrost wydajności wykonywanego polecenia
+            przez utworzenie indeksu na atrybucie <em>me_time</em>. W bazie danych
+            koordynatora wykonaj poniższe polecenie:
+            <pre><code>CREATE INDEX me_time_idx on measurements(me_time);</code></pre>
+        </li>
+        <li>
+            Ponownie sprawdź plan zapytania. Czy indeks został wykorzystany?
+            Czy zmienił się szacowany koszt wykonania jednego zadania?
+            <mark>[Raport]</mark>
+        </li>
+        <li>
+            Dodaj w warunku selekcji zapytania kryterium rozpraszania. Jaka
+            nastąpiła zmiana w planie? <mark>[Raport]</mark>
+<pre><code>EXPLAIN select lo_description, me_time, me_temperature
+from loggers join measurements on (lo_id=me_lo_id and lo_or_id=me_or_id)
+where me_time between timestamp '2017-03-15 08:13' and timestamp '2017-03-15 09:18'
+    and <mark>lo_or_id=143</mark>
+order by me_time;
+</code>
+</pre>
+        </li>
+    </ol>
+    <h2 id="tabele-referencyjne">Tabele referencyjne</h2>
+    <p>
+        Zapoznaj się ze skryptem ~/loggers/logger_types.sql. Zawiera on
+        definicję tabeli <em>logger_types</em>. Wiersze tej tabeli opisują
+        rejestratory wszystkich organizacji, z tego powodu nie można jej
+        bezpośrednio fragmentować poziomo. W związku z tym, że tabela
+        <em>loggers_types</em> zawiera niewiele wierszy lepszym sposobem jest
+        jej replikacja na wszystkie bazy danych klastra. Rozszerzenie Citus
+        nazywa taki rodzaj tabel tabelami referencyjnymi. W schemacie
+        fragmentowanej poziomo bazy danych mają on analogiczne znaczenie jak
+        tabele wymiarów w hurtowni danych.
+    </p>
+
+    <ol>
+        <li>
+            W bazie danych koordynatora uruchom skrypt
+            /data/loggers/logger_types.sql z wykorzystaniem poniższego
+            polecenia:
+            <pre><code>\i /data/loggers/logger_types.sql</code></pre>
+        </li>
+        <li>
+            W bazie danych koordynatora wykorzystaj funkcję <a
+                href="https://docs.citusdata.com/en/latest/reference/user_defined_functions.html#create-reference-table">create_reference_table</a>
+            do wskazania, że tabela <em>loggers_types</em> jest tabelą
+            referencyjną:
+            <pre><code>SELECT create_reference_table('logger_types');</code></pre>
+        </li>
+        <li>
+            W bazie danych koordynatora załaduj dane do tabeli
+            <em>loggers_types</em>:
+
+            <pre><code>\i /data/loggers/logger_types.dmp</code></pre>
+        </li>
+        <li>
+            Wykorzystując poniższe polecenie sprawdź ile fragmentów tej
+            tabeli zostało utworzone bazach danych węzłów roboczych.
+<pre><code>SELECT shard_name, nodename
+FROM citus_shards
+WHERE table_name = 'logger_types'::regclass;
+</code></pre>
+            Porównaj zawartość tych fragmentów z zawartością tabeli
+            <em>loggers_types</em>. <mark>[Raport]</mark>
+        </li>
+
+        <li>
+            W bazie danych koordynatora zmodyfikuj nazwę jednego z typów
+            rejestratora:
+            <pre><code>UPDATE logger_types SET lt_name='TypRejestratora2' WHERE lt_name='LoggerType2';</code></pre>
+        </li>
+        <li>
+            Sprawdź czy zmiany zostały przeniesione do fragmentów w bazach
+            danych węzłów roboczych. <mark>[Raport]</mark>
+        </li>
+        <li>
+            Sprawdź plan poniższego zapytania, które odwołuje się do tabeli
+            <em>loggers_types</em>. Ile baz danych klastra było zaangażowanych w
+            wykonanie tego zapytania? <mark>[Raport]</mark>
+
+<pre><code>explain
+select lt_name, lo_description, me_time, me_temperature
+from loggers join measurements on (lo_id=me_lo_id and lo_or_id=me_or_id)
+  join logger_types on(lt_id=lo_lt_id)
+where me_time between timestamp '2017-03-15 08:13' and timestamp '2017-03-15 09:18'
+  and lo_or_id=143
+order by me_time;
+</code>
+</pre>
+        </li>
+    </ol>
+    <h2 id="rozpraszanie-połączeń-do-klastra-citus">Rozpraszanie połączeń do
+        klastra Citus</h2>
+    <ol>
+        <li>
+            Metadane klastra Citus są zarządzane i składowane w bazie danych
+            koordynatora. Domyślnie są one replikowane na węzły robocze. Zabieg ten
+            umożliwia zlecanie zapytań i poleceń DML nie tylko w sesjach
+            koordynatora ale również w sesjach węzłów roboczych. Polecenia DDL są
+            obsługiwane jedynie przez sesje koordynatora. Przetestuj ten mechanizm i
+            wykonaj w zakładce pgsql-citus-sts-1 następujące polecenie:
+            <pre><code>UPDATE loggers SET lo_description='<strong>New</strong> Fridge #23' where lo_id=622 and lo_or_id=138;</code></pre>
+        </li>
+        <li>
+            Skorzystamy z usługi <em>LoadBalancer</em> klastra Kubernetes aby
+            przyłączyć się do jednego węzłów klastra Citus. Uruchom w terminalu
+            pomocniczym następujące polecenie:
+            <pre><code>psql -h localhost -U postgres</code></pre>
+        </li>
+        <li>
+            Za pomocą poniższego polecenia wydanego w terminalu pomocniczym
+            ustal adres IP węzła klastra Kubernetes, na którym działa baza danych do
+            której się przyłączyłeś.
+            <pre><code>SELECT inet_server_addr();</code></pre>
+        </li>
+        <li>
+            Sprawdź nazwę domenową tego adresu. Będziesz potrzebować w tym
+            celu narzędzia, które nie są zainstalowane w obrazie kontenera. Uruchom
+            w trybie interaktywnym samodzielny Pod z obrazem kontenera
+            <em>dnsutils</em>. W nowej zakładce terminala uruchom poniższe
+            polecenie:
+
+<pre><code>kubectl run -it dnsutils \
+--image gcr.io/kubernetes-e2e-test-images/dnsutils:1.3
+</code></pre>
+
+            Następnie w interaktywnej sesji z nowym Pod wykorzystaj polecenie
+            <code>nslookup</code> do sprawdzenia nazwy domenowej adresu IP, adres IP podaj jako
+            argument tego polecenia.
+        </li>
+        <li>
+            Otwórz nową zakładkę terminala w celu nawiązania kolejnej sesji z
+            klastrem Citus w taki sam sposób jak w punkcie 2.
+        </li>
+        <li>
+            Sprawdź IP i nazwę domenową węzła klastra Citus, do których się
+            przyłączyłeś.
+        </li>
+        <li>
+            Wykonaj dowolne operacje modyfikacji danych za pomocą sesji,
+            który ustanowiłeś w punkcie 2 i 5.
+        </li>
+        <li>
+            Czy zaobserwowałeś jakieś różnice w funkcjonalności tych sesji?
+            <mark>[Raport]</mark>
+        </li>
+    </ol>
+    <h2 id="dodawanie-nowej-bazy-danych-do-klastra-citus">Dodawanie
+        nowej bazy danych do klastra Citus</h2>
+    <p>
+        W celu wydajnego obsłużenia zwiększającej się ilości danych i
+        zwiększającego się obciążenia systemu można dodać nową bazę danych do
+        klastra.
+    </p>
+    <ol>
+        <li>
+            W terminalu pomocniczym zwiększ liczbę replik
+            <em>StatefulSet</em> do czterech. W tym celu wykonaj poniższe
+            polecenie:
+
+            <pre><code>kubectl scale sts pgsql-citus-sts --replicas 4</code></pre>
+            Powyższe polecenie, zostało wykorzystane w celu poglądowym. Z punktu
+            widzenia właściwej metodyki definicji klastra Kubernetes należałoby
+            zmodyfikować manifest ustalając nową liczbę replik i następnie ponownie
+            go wdrożyć.
+        </li>
+        <li>
+            W bazie danych koordynatora dodaj nową bazę danych do
+            klastra:
+            <pre><code>SELECT * from citus_add_node('pgsql-citus-sts-3.pgsql-rbd-citus', 5432);</code></pre>
+        </li>
+        <li>
+            Sprawdź jakie zostały utworzone fragmenty tabel w bazie danych
+            nowego węzła roboczego. <mark>[Raport]</mark>
+        </li>
+        <li>
+            Od wersji 11 Citus Community wspiera balansowanie fragmentów
+            rozproszonych tabel. Służy do tego funkcja <a
+                href="https://docs.citusdata.com/en/stable/develop/api_udf.html#citus-rebalance-start">citus_rebalance_start</a>.
+            Operacja ta jest wysoce współbieżna, kopiowanie fragmentów odbywa się z
+            wykorzystaniem mechanizmu logicznej replikacji, a dostęp do fragmentów
+            jest blokowany przez krótki czas potrzebny na zmodyfikowanie metadanych.
+            Replikacja logiczna wymaga generowania dziennika transakcyjnego ze
+            szczegółowością na poziomie <em>logical</em>. Obecnie bazy danych
+            działają na poziomie <em>replica</em>, który jest niewystarczający na
+            potrzeby replikacji logicznej. W związku z tym uruchom poniższe
+            polecenie w każdej z 4 baz danych aby ustawić poziom
+            <em>logical</em>.
+
+            <pre><code>alter system set wal_level=logical;</code></pre>
+        </li>
+        <li>
+            W celu zaaplikowania zmian wprowadzonych za pomocą polecenia
+            ALTER SYSTEM SET należy zrestartować wszystkie bazy danych, w tym celu
+            wykonaj w terminalu poniższe polecenie:
+            <pre><code>kubectl rollout restart statefulset/pgsql-citus-sts</code></pre>
+            Monitoruj postęp restartu za pomocą polecenia:
+            <pre><code>kubectl rollout status statefulset/pgsql-citus-sts</code></pre>
+            Poczekaj na zakończenie restartu.
+        </li>
+        <li>
+            Rozpocznij balansowanie uruchamiając w bazie koordynatora
+            poniższe polecenie:
+            <pre><code>SELECT citus_rebalance_start();</code></pre>
+        </li>
+        <li>
+            Monitoruj status realizacji operacji balansowania uruchamiając w
+            koordynatorze poniższe polecenie:
+            <pre><code>SELECT details FROM citus_rebalance_status();</code></pre>
+            Poczekaj na zakończenie balansowania.
+        </li>
+        <li>
+            Sprawdź nowe rozproszenie fragmentów między węzły robocze, w tym
+            celu wykonaj w koordynatorze poniższe polecenie:
+<pre><code>SELECT table_name, nodename, count(*)
+FROM citus_shards
+GROUP BY table_name, nodename
+ORDER BY table_name, nodename;
+</code></pre>
+            Czy rozproszenie fragmentów między węzły robocze jest równomierne?
+            Dlaczego? <mark>[Raport]</mark>
+        </li>
+    </ol>
+</article>
+<style type="text/css">
+    /* Ograniczamy działanie liczników tylko do artykułu z klasą .tutorial */
+    article.tutorial {
+        counter-reset: h2counter;
+        /* reset głównego licznika */
+    }
+
+    /* --- Numerowanie h2 --- */
+    article.tutorial h2 {
+        counter-increment: h2counter;
+        /* zwiększamy licznik h2 */
+        counter-reset: h3counter;
+        /* resetujemy podrzędne liczniki */
+    }
+
+    article.tutorial h2::before {
+        content: counter(h2counter) ". ";
+        font-weight: normal;
+        color: #555;
+    }
+
+    /* --- Numerowanie h3 --- */
+    article.tutorial h3 {
+        counter-increment: h3counter;
+        counter-reset: h4counter;
+    }
+
+    article.tutorial h3::before {
+        content: counter(h2counter) "." counter(h3counter) " ";
+        font-weight: normal;
+        color: #777;
+    }
+
+    /* --- Numerowanie h4 (opcjonalnie) --- */
+    article.tutorial h4 {
+        counter-increment: h4counter;
+    }
+
+    article.tutorial h4::before {
+        content: counter(h2counter) "." counter(h3counter) "." counter(h4counter) " ";
+        font-weight: normal;
+        color: #999;
+    }
+
+    article.tutorial {
+        font: 400 16px/1.5 "Helvetica Neue", Helvetica, Arial, sans-serif;
+        color: #111;
+        background-color: #fbfbfb;
+        -webkit-text-size-adjust: 100%;
+        -webkit-font-feature-settings: "kern" 1;
+        -moz-font-feature-settings: "kern" 1;
+        -o-font-feature-settings: "kern" 1;
+        font-feature-settings: "kern" 1;
+        font-kerning: normal;
+        padding: 30px;
+    }
+
+    @media only screen and (max-width: 600px) {
+        article.tutorial {
+            padding: 5px;
+        }
+
+        article.tutorial>#content {
+            padding: 0px 20px 20px 20px !important;
+        }
+    }
+
+    article.tutorial>#content {
+        margin: 0px;
+        max-width: 900px;
+        border: 1px solid #e1e4e8;
+        padding: 10px 40px;
+        padding-bottom: 20px;
+        border-radius: 2px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    article.tutorial summary {
+        cursor: pointer;
+        text-decoration: underline;
+    }
+
+    article.tutorial hr {
+        color: #bbb;
+        background-color: #bbb;
+        height: 1px;
+        flex: 0 1 auto;
+        margin: 1em 0;
+        padding: 0;
+        border: none;
+    }
+
+    article.tutorial .hljs-operator {
+        color: #868686;
+        /* There is a bug where the syntax highlighter would pick no color for e.g. `&&` symbols in the code samples. Let's overwrite this */
+    }
+
+    /* Links */
+    article.tutorial a {
+        color: #0366d6;
+        text-decoration: none;
+    }
+
+    article.tutorial a:visited {
+        color: #0366d6;
+    }
+
+    article.tutorial a:hover {
+        color: #0366d6;
+        text-decoration: underline;
+    }
+
+    article.tutorial pre {
+        background-color: #f6f8fa;
+        border-radius: 3px;
+        font-size: 85%;
+        line-height: 1.45;
+        overflow: auto;
+        padding: 16px;
+    }
+
+    article.tutorial code {
+        background-color: rgba(27, 31, 35, .05);
+        border-radius: 3px;
+        font-size: 85%;
+        margin: 0;
+        word-wrap: break-word;
+        padding: .2em .4em;
+        font-family: SFMono-Regular, Consolas, Liberation Mono, Menlo, Courier, monospace;
+    }
+
+    article.tutorial pre>code {
+        background-color: transparent;
+        border: 0;
+        display: inline;
+        line-height: inherit;
+        margin: 0;
+        overflow: visible;
+        padding: 0;
+        word-wrap: normal;
+        font-size: 100%;
+    }
+
+    /* Blockquotes */
+    article.tutorial blockquote {
+        margin-left: 30px;
+        margin-top: 0px;
+        margin-bottom: 16px;
+        border-left-width: 3px;
+        padding: 0 1em;
+        color: #828282;
+        border-left: 4px solid #e8e8e8;
+        padding-left: 15px;
+        font-size: 18px;
+        letter-spacing: -1px;
+        font-style: italic;
+    }
+
+    article.tutorial blockquote * {
+        font-style: normal !important;
+        letter-spacing: 0;
+        color: #6a737d !important;
+    }
+
+    /* Tables */
+    article.tutorial table {
+        border-spacing: 2px;
+        display: block;
+        font-size: 14px;
+        overflow: auto;
+        width: 100%;
+        margin-bottom: 16px;
+        border-spacing: 0;
+        border-collapse: collapse;
+    }
+
+    article.tutorial td {
+        padding: 6px 13px;
+        border: 1px solid #dfe2e5;
+    }
+
+    article.tutorial th {
+        font-weight: 600;
+        padding: 6px 13px;
+        border: 1px solid #dfe2e5;
+    }
+
+    article.tutorial tr {
+        background-color: #fff;
+        border-top: 1px solid #c6cbd1;
+    }
+
+    article.tutorial table tr:nth-child(2n) {
+        background-color: #f6f8fa;
+    }
+
+    /* Others */
+    article.tutorial img {
+        max-width: 100%;
+    }
+
+    article.tutorial p {
+        line-height: 24px;
+        font-weight: 400;
+        font-size: 16px;
+        color: #24292e;
+    }
+
+    article.tutorial ul {
+        margin-top: 0;
+    }
+
+    article.tutorial li {
+        color: #24292e;
+        font-size: 16px;
+        font-weight: 400;
+        line-height: 1.5;
+    }
+
+    article.tutorial li+li {
+        margin-top: 0.25em;
+    }
+
+    article.tutorial * {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+        color: #24292e;
+    }
+
+    article.tutorial a:visited {
+        color: #0366d6;
+    }
+
+    article.tutorial h1,
+    article.tutorial h2,
+    article.tutorial h3 {
+        border-bottom: 1px solid #eaecef;
+        color: #111;
+        /* Darker */
+    }
+
+    article.tutorial code>* {
+        font-family: Consolas, "Liberation Mono", Menlo, Courier, monospace !important;
+    }
+</style>
