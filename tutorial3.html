@@ -1,0 +1,730 @@
+<article class="tutorial">
+    <h1 id="replikacja-strumieniowa-w-szbd-postgres">Replikacja strumieniowa
+        w SZBD Postgres</h1>
+    <p>
+        Celem zajęć jest zapoznanie się z replikacją strumieniową w SZBD
+        Postgres w konfiguracji z rozszerzeniem Citus w celu zwiększenia
+        niezawodności rozwiązania.
+    </p>
+    <h2 id="konfiguracja-środowiska">Konfiguracja środowiska </h2>
+    <p>
+        Rozszerzenie Citus od wersji 11 nie oferuje własnych mechanizmów do
+        zwiększenia niezawodności bazy danych koordynatora oraz baz danych
+        węzłów roboczych, należy skorzystać z innych rozwiązań. Rekomendowanym
+        przez twórców rozszerzenia Citus rozwiązaniem jest <a
+            href="https://www.postgresql.org/docs/current/static/warm-standby.html#STREAMING-REPLICATION">replikacja
+            strumieniowa</a> dostarczana bezpośrednio przez Postgresql. Rozwiązanie
+        to opiera się na dwóch rodzajach baz danych: na podstawowej bazie danych
+        (ang. primary database) i na czuwających bazach danych (ang. standby
+        database). Jedna podstawowa baza danych może być replikowana do jednej
+        lub wielu czuwających baz danych. Podstawowa baza danych jest bazą
+        danych działającą w trybie odczyt-zapis, natomiast czuwające bazy danych
+        działają w trybie tylko-do-odczytu. Replikacja zmian wprowadzonych w
+        podstawowej bazie danych do czuwających baz danych odbywa się przez
+        transferowanie przez sieć zmian zarejestrowanych w <a
+            href="https://en.wikipedia.org/wiki/Transaction_log">dzienniku</a>
+        podstawowej bazy danych. Przetransferowane zmiany do czuwających baz
+        danych są przez nie wykorzystywane do uspójnienia się ze stanem
+        podstawowej bazy danych. W przypadku wystąpienia awarii podstawowej bazy
+        danych następuje ręczne lub automatyczne przełączenie jednej z
+        czuwających baz danych w tryb podstawowej bazy danych (ang. failover).
+        Istnieje możliwość zamiany ról miedzy podstawową i czuwającą bazą danych
+        w trakcie bezawaryjnej pracy systemu w celu np. wykonania uaktualnienia
+        oprogramowania (ang. switchover). W Postgres replikacja strumieniowa
+        może odbywać się synchronicznie lub asynchronicznie. Replikacja
+        synchroniczna wymaga, aby przed zatwierdzeniem transakcji w podstawowej
+        bazie danych zmiany tej transakcji zostały odebrane lub zastosowane
+        przez repliki. Dzięki temu podejściu redukowane jest ryzyko utraty danych
+        w przypadku awarii podstawowej bazy danych. Wadą rozwiązania jest opóźnienie zakończenia
+        operacji COMMIT na podstawowej bazie danych do czasu zakończenia propagacji zmian transakcji
+        do czuwających baz danych.
+        W replikacji asynchronicznej operacja COMMIT jest wykonywana niezależnie od postępu replikacji.
+        Kosztem zmniejszonej niezawodności uzyskiwana jest większa wydajność replikacji.
+    </p>
+    <p>
+        W celu ułatwienia konfiguracji podstawowej i czuwającej bazy danych
+        oraz automatycznego przełączenia w przypadku awarii podstawowej bazy
+        danych wykorzystamy działający w oparciu o asynchroniczną replikację
+        strumieniową operator <a href="https://www.kubegres.io/">Kubegres</a>
+        klastra Kubernetes. Operator klastra Kubernetes jest rodzajem
+        kontrolera, który rozszerza API Kubernetes w celu zarządzania złożonymi
+        aplikacjami stanowymi.
+    </p>
+    <p>
+        Pojęcie klaster jest używane w wielu kontekstach, poniższe
+        zestawienie ma na celu uporządkowania tych kontekstów:
+    <ul>
+
+        <li>
+            Klaster Postgres - zbiór baz danych Postgres działających na tym
+            samym węźle. W związku z tym, że typowe kontenery Postgres są
+            skonfigurowane z jedną bazą danych, to pojęcia tego nie używamy w
+            tutorialach.
+        </li>
+        <li>
+            Klaster Kubegres – zbiór baz danych w skład którego wchodzą:
+            podstawowa bazy danych Postgres i jej czuwające bazy danych.
+        </li>
+        <li>
+            Klaster Citus – zbiór baz danych Postgres, który umożliwia replikację
+            poziomą. W celu zwiększenia jego niezawodności, każdy element klastra
+            Citus będzie klastrem Kubegres.
+        </li>
+        <li>
+            Klaster Kubernetes – środowisko orkiestracji skonteneryzowanych
+            aplikacji, potencjalnie może zarządzać wieloma klastrami Citus i
+            klastrami innych aplikacji.
+        </li>
+    </ul>
+    </p>
+    <ol>
+        <li>
+            Niestety Kubegres nie można wdrożyć dla działającego systemu, z
+            tego powodu w terminalu pomocniczym usuń klaster Kubernetes:
+            <pre><code>k3d cluster delete RBDcluster</code></pre>
+        </li>
+        <li>
+            W terminalu pomocniczym utwórz klaster ponownie:
+            <pre><code>k3d cluster create RBDcluster --servers 1 --agents 4  \
+  -p "5432-5435:5432-5435@loadbalancer"
+</code></pre>
+        </li>
+        <!--
+        <li>
+            Niestety Kubegres nie można wdrożyć dla działającego systemu, z
+            tego powodu w terminalu pomocniczym usuń obiekty wdrożone za pomocą
+            pliku manifestów wykonując poniższe polecenie:
+            <pre><code>kubectl delete -f rbd-citus.yaml</code></pre>
+        </li>
+
+        <li>
+            Trwałe woluminy nie są usuwane kaskadowo wraz z usunięciem
+            StatefulSet, które je wykorzystywały, z tego powodu wykonaj w terminalu
+            pomocniczym poniższe polecenia w celu ich usunięcia:
+            <pre><code>kubectl delete pvc pgsql-rbd-citus-disk-pgsql-citus-sts-0
+kubectl delete pvc pgsql-rbd-citus-disk-pgsql-citus-sts-1
+kubectl delete pvc pgsql-rbd-citus-disk-pgsql-citus-sts-2
+kubectl delete pvc pgsql-rbd-citus-disk-pgsql-citus-sts-3
+</code></pre>
+        </li>
+    -->
+
+
+        <li>
+            Zainstaluj operator Kubegres wykonując w terminalu pomocniczym
+            poniższe polecenie:
+
+            <pre><code>kubectl apply -f \
+  https://raw.githubusercontent.com/reactive-tech/kubegres/v1.19/kubegres.yaml
+</code></pre>
+        </li>
+
+        <li>
+            Zainstaluj mapę konfiguracyjną (ang. configuration map)
+            wykorzystywaną przez Kubegres, wykorzystaj w terminalu pomocniczym
+            poniższy potok poleceń:
+
+            <pre><code>curl \
+  https://raw.githubusercontent.com/reactive-tech/kubegres/refs/heads/main/internal/controller/spec/template/yaml/BaseConfigMapTemplate.yaml | \
+  sed "s/md5/trust/g" | \
+  sed "/reject/d" | \
+  sed "/postgres.conf: |/ a \ \ \ \ shared_preload_libraries='citus'" | \
+  kubectl apply -f -
+</code>
+</pre>
+            Mapa konfiguracyjna Kubernetes umożliwia składowanie i zarządzanie
+            danymi konfiguracyjnymi, które są dostępne z poziomu Podów w postaci
+            wartości zmiennych środowiskowych lub zawartości plików. Zainstalowana
+            mapa definiuje między innymi zawartość 2 plików konfigurujących bazę
+            danych Postgres uruchomianą w Pod: <em>postgres.conf</em> oraz <em>pg_hba.conf</em>. Ten
+            pierwszy plik jest ogólnym plikiem konfigurującym Postgres natomiast ten
+            drugi służy do zdefiniowania sposobu uwierzytelnienia dostępu do systemu
+            Postgres. W powyższym poleceniu zastosowano polecenia <em>sed</em> w celu
+            modyfikacji zawartości obu plików do naszych celów. Pierwsze polecenie
+            <em>sed</em> służy do wyłączenia w pliku <em>pg_hba.conf</em> uwierzytelnienia, połączenia
+            do bazy danych będzie można wykonywać bez podania jakichkolwiek danych
+            uwierzytelniających np. hasła. Takie rozwiązanie ułatwi komunikację w
+            klastrze Citus, ponieważ jego wersja Community uniemożliwia użycie
+            portfela z hasłami. W systemie produkcyjnym można zastosować plik <a
+                href="https://www.postgresql.org/docs/current/libpq-pgpass.html">.pgpass</a>
+            do składowania haseł lub <a href="https://www.postgresql.org/docs/current/auth-cert.html">uwierzytelnienie
+                za pomocą certyfikatów</a>. Drugie polecenie <em>sed</em> usuwa wpis w
+            <em>pg_hba.conf</em>, który uniemożliwia zdalne połączenie z wykorzystaniem
+            protokołu <a href="https://pl.wikipedia.org/wiki/IPv4">IPv4</a>. Trzecie
+            polecenie <em>sed</em>s dodaje w pliku <em>postgres.conf</em> wiersz, który umożliwia
+            załadowanie pliku biblioteki <em>citus.so</em>, która jest niezbędna do działania
+            rozszerzenia Citus. Zachęcam do samodzielnego przestudiowania zawartości
+            źródłowego pliku YAML.
+        </li>
+    </ol>
+
+    <h2>Konfiguracja i wdrożenie replikacji strumieniowej</h2>
+    <ol>
+        <li>
+            W terminalu pomocniczym pobierz plik manifestów, który
+            wykorzystamy do definicji koordynatora klastra Citus, uruchom poniższe
+            polecenie:
+            <pre><code>wget https://www.cs.put.poznan.pl/jjezierski/RBDv2/rbd-citus-coord.yaml</code></pre>
+        </li>
+
+
+        <li>
+            Przeglądnij zawartość pobranego pliku uruchamiając w terminalu
+            pomocniczym następujące polecenie:
+
+            <pre><code>less rbd-citus-coord.yaml</code></pre>
+            Plik manifestów zawiera 2 manifesty. Pierwszy manifest opisuje
+            parametry poufne (ang. secrets), parametry te są bardzo podobne do mapy
+            konfiguracyjnej, z tą różnicą, że wartości parametrów poufnych są
+            składowane w repozytorium Kubernetes w postaci zaciemnionej. W naszym
+            przypadku parametry poufne zostały wykorzystane do przekazania hasła
+            użytkownika <em>postgres</em>, który jest administratorem systemu
+            Postgres oraz hasła użytkownika <em>replication</em>, który jest
+            wykorzystywany do uwierzytelniania połączenia stosowanego do replikacji
+            strumieniowej.
+            Drugi manifest służy do utworzenia z pomocą operatora Kubegres
+            obiektów Kubernetes, które będą implementować strumieniową replikację
+            między co najmniej dwoma bazami danych Postgres. Klucz
+            <em>apiVersion</em> służy do wskazania wersji API obiektu Kubernetes, w
+            naszym przypadku jest to aktualna wersja operatora Kubegres. Klucz
+            <em>kind</em> określa rodzaj obiektu Kubernetes, wartość klucza wskazuje
+            operator Kubegres. Klucz <em>spec.replicas</em> definiuje liczbę replik,
+            wartość 2 oznacza, że zostaną utworzone dwa StatefulSet. Jeden
+            StatefulSet będzie obsługiwał podstawową bazę danych, natomiast drugi
+            będzie obsługiwał czuwająca bazę danych. Większa liczba replik zwiększy
+            liczbę StatefulSet, które obsługiwałyby kolejne czuwające bazy danych.
+            Klucz <em>spec.image</em> wskazuje na obraz kontenera uruchamianego w
+            StatefulSet, wykorzystujemy obraz Postgres z zainstalowanymi plikami
+            bibliotek rozszerzenia Citus. Klucz <em>spec.database</em> definiuje
+            rozmiar trwałego woluminu, który zostanie wykorzystany do składowania
+            danych bazy danych Postgres oraz miejsce jego zamontowania. Klucz
+            <em>spec.env</em> służy do zdefiniowania zmiennych środowiskowych,
+            których wartości są wykorzystywane przez skrypty inicjalizacyjne
+            kontenera. Zwróć uwagę, że wartości zmiennych środowiskowych
+            POSTGRES_PASSWORD oraz POSTGRES_REPLICATION_PASSWORD zostały określone z
+            wykorzystaniem parametrów poufnych zdefiniowanych w pierwszym
+            manifeście.
+
+            Opuść program <em>less</em> wybierając przycisk <em>q</em>.
+        </li>
+
+        <li>
+            Otwórz nową zakładkę terminala i nazwij ją
+            <em>diagnostyczny</em>.
+
+        </li>
+        <li>
+            Uruchom w terminalu diagnostycznym poniższe polecenie w celu
+            monitorowania zdarzeń mających miejsce w klastrze
+            Kubernetes:
+            <pre><code>kubectl get events -o custom-columns=LastSeen:.lastTimestamp,From:.involvedObject.name,Reason:.reason --watch</code></pre>
+        </li>
+
+
+        <li>
+            Wykonaj wdrożenie pliku manifestu wykonując w terminalu
+            pomocniczym poniższe polecenie:
+            <pre><code>kubectl apply -f rbd-citus-coord.yaml</code></pre>
+        </li>
+
+
+        <li>
+            W terminalu pomocniczym wydaj poniższe polecenie w celu
+            monitorowania tworzenia stanowych Pod:
+
+            <pre><code>kubectl get sts --watch</code></pre>
+            Poczekaj aż oba Pody zostaną uruchomione. Przerwij polecenie.  Zanotuj
+            wynik <mark>[Raport]</mark>. Zapoznaj
+            się w terminalu diagnostycznym ze szczegółami tworzenia Pod.
+        </li>
+
+        <li>
+            Oprócz obiektów StatefulSet zostały utworzone również usługi bezgłowe,
+            których zadaniem jest udostępnienie nazw domenowych Pod. Usługa,
+            która obsługuje podstawową bazę danych będzie się nazywać tak jak nazwa
+            instancji operatora Kubegres, czyli w naszym przypadku
+            <em>rbd-citus-coord</em>, natomiast obsługująca repliki będzie się
+            nazywać <em>rbd-citus-coord-replica</em>. W przypadku awarii podstawowej
+            bazy danych jedna z replik zostanie promowana przez operator Kubegres do
+            roli podstawowej bazy danych i nazwa <em>rbd-citus-coord</em> zacznie
+            automatycznie wskazywać na nową podstawową bazę danych. Te 
+            usługi bezgłowe nie wynikają wprost z manifestu, są one specyficzną własnością
+            operatora Kubegres. W celu sprawdzenia utworzenia odpowiednich
+            bezgłowych usług wydaj w terminalu pomocniczym poniższe
+            polecenie:
+
+            <pre><code>kubectl get svc</code></pre>
+            Aby sprawdzić jakie punkt końcowe są skojarzone z tymi usługami użyj
+            w tym samym terminalu polecenia:
+            <pre><code>kubectl get endpoints</code></pre>
+            Zanotuj wynik. <mark>[Raport]</mark>
+        </li>
+
+        <li>
+            Przygotuj manifest dla pierwszego węzła roboczego:
+
+            <ul>
+                <li>
+                    W terminalu pomocniczym skopiuj manifest
+                    rbd-citus-coord.yaml
+                    <pre><code>cp rbd-citus-coord.yaml rbd-citus-worker1.yaml</code></pre>
+                </li>
+                <li>
+                    Użyj ulubionego edytora tekstowego do zamiany w pliku
+                    <em>rbd-citus-worker1.yaml</em> wartości <em>rbd-citus-coord</em> klucza
+                    <em>metadata.name</em> na wartość <em>rbd-citus-worker1</em>.
+
+                </li>
+                <li>
+                    Wykonaj wdrożenie manifestu w terminalu pomocniczym:
+                    <pre><code>kubectl apply -f rbd-citus-worker1.yaml</code></pre>
+                </li>
+            </ul>
+
+        </li>
+        <li>
+            Na podstawie poprzedniego punktu przygotuj manifest dla drugiego
+            węzła roboczego i wykonaj wdrożenie.
+        </li>
+        <li>
+            Otwórz nową zakładkę terminala i nazwij ją
+            <em>koordynator</em>.
+
+        </li>
+        <li>
+            Adresy utworzonych Podów są dostępne jedynie w klastrze Kubernetes.
+            Można byłoby podłączyć się do baz danych, które w nich działają
+            uruchamiając powłokę tak jak to robiliśmy wcześniej wywołując polecenie
+            <em>kubectl exec</em>. W tym przypadku w celu przetestowania zdalnego
+            połączenia do koordynatora uruchomimy w trybie interaktywnym dodatkowy
+            samodzielny Pod o nazwie <em>psql</em> zawierający klienta
+            <em>psql</em>. W tym celu w zakładce koordynator uruchom poniższe
+            polecenie:
+
+
+            <pre><code>kubectl run -it psql --image postgres:16.0 /bin/bash</code></pre>
+            Jeżeli utracisz zakładkę możesz przyłączyć się ponownie do Pod za
+            pomocą następującego polecenia:
+            <pre><code>kubectl attach psql -c psql -i -t</code></pre>
+        </li>
+
+        <li>
+            Po pojawieniu się znaku zachęty w terminalu koordynatora, w
+            terminalu pomocniczym skopiuj do Pod <em>psql</em> skrypty SQL
+            uruchamiając polecenie:
+            <pre><code>kubectl cp ~/loggers psql:/</code></pre>
+        </li>
+
+
+        <li>
+            W terminalu diagnostycznym upewnij się, że zakończyło się
+            wdrożenie manifestów.
+        </li>
+        <li>
+            W terminalu koordynatora uruchom narzędzie <em>psql</em> łącząc
+            się do podstawowej bazy danych koordynatora za pomocą następującego
+            polecenia:
+            <pre><code>psql -h rbd-citus-coord -U postgres</code></pre>
+        </li>
+
+
+        <li>
+            Skonfiguruj nowy klaster Citus wykonując w bazie
+            koordynatora następujące polecenia:
+
+            <pre><code>SELECT citus_set_coordinator_host('rbd-citus-coord', 5432);
+SELECT * from citus_add_node('rbd-citus-worker1', 5432);
+SELECT * from citus_add_node('rbd-citus-worker2', 5432);
+</code></pre>
+            Zauważ, że jako koordynator jest wskazany host
+            <em>rbd-citus-coord</em>, natomiast węzłami roboczymi klastra Citus są
+            hosty <em>rbd-citus-worker1</em> i <em>rbd-citus-worker2</em>.
+
+        </li>
+
+        <li>
+            Utwórz obiekty użytkownika w klastrze Citus uruchamiając w bazie
+            koordynatora poniższe polecenia:
+
+            <pre><code>\i /loggers/loggers.sql</code></pre>
+            Wykonaj poniższe polecenia osobno:
+            <pre><code>SELECT create_distributed_table('organizations', 'or_id');
+\i /loggers/organizations.dmp
+</code></pre>
+            Wykonaj poniższe polecenia osobno:
+            <pre><code>SELECT create_distributed_table('loggers', 'lo_or_id', colocate_with =&gt; 'organizations');
+\i /loggers/loggers.dmp
+</code></pre>
+
+        </li>
+
+        <li>
+            W bazie danych koordynatora sprawdź dostępność obiektów
+            użytkownika wykonując poniższe polecenia SQL:
+
+            <pre><code>select * from loggers where lo_or_id=261;
+update loggers set lo_description='changed' where lo_or_id=261;
+</code></pre>
+        </li>
+
+        <li>
+            W bazie danych koordynatora sprawdź status replikacji
+            uruchomiając poniższe polecenie:
+
+            <pre><code>select * from pg_stat_replication \x\g\x</code></pre>
+        </li>
+
+        <li>
+            Sprawdź i zanotuj adres IP bazy danych koordynatora, wykorzystaj
+            poniższe polecenie:
+
+            <pre><code>SELECT inet_server_addr();</code></pre>
+
+        </li>
+        <li>
+            W terminalu koordynatora opuść narzędzie <em>psql</em> wydając
+            polecenie <code>quit</code>.
+        </li>
+        <li>
+            W terminalu koordynatora przyłącz się do repliki (czuwającej bazy
+            danych) koordynatora wykonując polecenie:
+
+            <pre><code>psql -h rbd-citus-coord-replica -U postgres</code></pre>
+
+        </li>
+        <li>
+            Sprawdź i zanotuj adres IP repliki bazy danych koordynatora,
+            wykorzystaj poniższe polecenie:
+            <pre><code>SELECT inet_server_addr();</code></pre>
+        </li>
+
+
+        <li>
+            W replice bazy danych koordynatora sprawdź dostępność obiektów
+            użytkownika wykonując poniższe polecenia SQL:
+
+            <pre><code>select * from loggers where lo_or_id=261;
+update loggers set lo_description='changed' where lo_or_id=261;
+</code></pre>
+            Czy wykonanie obu poleceń się powiodło? Dlaczego? <mark>[Raport]</mark>
+        </li>
+
+        <li>
+            W replice bazy danych koordynatora sprawdź status replikacji
+            uruchamiając poniższe polecenie:
+
+            <pre><code>select * from pg_stat_wal_receiver \x\g\xs</code></pre>
+        </li>
+
+        <li>
+            W terminalu koordynatora upuść narzędzie <em>psql</em> wydając
+            polecenie <code>quit</code>.
+        </li>
+        <li>
+            W terminalu koordynatora uruchom narzędzie <em>psql</em> łącząc
+            się do podstawowej bazy danych koordynatora za pomocą następującego
+            polecenia:
+
+            <pre><code>psql -h rbd-citus-coord -U postgres</code></pre>
+
+        </li>
+        <li>
+            W terminalu pomocniczym zasymuluj awarię bazy danych koordynatora
+            przez zmniejszenie do zera liczby replik StatefulSet, który obsługuje tę
+            bazę danych. Wykorzystaj poniższe polecenie:
+
+            <pre><code>kubectl scale sts rbd-citus-coord-1 --replicas 0</code></pre>
+
+        </li>
+        <li>
+            W terminalu diagnostycznym obserwuj nowe zdarzenia. 
+            Po zakończeniu procesu awansu repliki i utworzeniu nowego Poda/repliki 
+            przejdź do następnego punktu.
+        </li>
+        <li>
+            W bazie danych koordynatora sprawdź dostępność obiektów
+            użytkownika wykonując poniższe polecenie SQL:
+
+            <pre><code>select * from loggers where lo_or_id=261;</code></pre>
+            Co się stało? <mark>[Raport]</mark>
+
+        </li>
+        <li>
+            Ponów powyższe polecenie. Jaki jest efekt? <mark>[Raport]</mark>
+        </li>
+        <li>
+            Sprawdź i zanotuj adres IP bazy danych koordynatora, wykorzystaj
+            poniższe polecenie:
+
+            <pre><code>SELECT inet_server_addr();</code></pre>
+            Czy adres się zmienił. Na jaki? Dlaczego? <mark>[Raport]</mark>
+        </li>
+
+        <li>
+            W terminalu pomocniczym sprawdź punkty końcowe:
+
+            <pre><code>kubectl get endpoints</code></pre>
+            Czy punkty końcowe usług się zmieniły w porównaniu do wyniku punkt 7?
+            Dlaczego? <mark>[Raport]</mark>
+        </li>
+
+        <li>
+            W terminalu pomocniczym sprawdź <em>StatefulSet</em>.
+
+            <pre><code>kubectl get sts</code></pre>
+            Czy coś zmieniło w kwestii koordynatora w porównaniu do wyniku punktu
+            6? Dlaczego? <mark>[Raport]</mark>
+        </li>
+
+        <li>
+            Przeprowadź analogiczny scenariusz symulując awarię czuwającej
+            bazy danych, która powinna teraz działać na <em>StatefulSet</em> o nazwie
+            rbd-citus-coord-3. <mark>[Raport]</mark>
+        </li>
+    </ol>
+</article>
+<style type="text/css">
+    /* Ograniczamy działanie liczników tylko do artykułu z klasą .tutorial */
+    article.tutorial {
+        counter-reset: h2counter;
+        /* reset głównego licznika */
+    }
+
+    /* --- Numerowanie h2 --- */
+    article.tutorial h2 {
+        counter-increment: h2counter;
+        /* zwiększamy licznik h2 */
+        counter-reset: h3counter;
+        /* resetujemy podrzędne liczniki */
+    }
+
+    article.tutorial h2::before {
+        content: counter(h2counter) ". ";
+        font-weight: normal;
+        color: #555;
+    }
+
+    /* --- Numerowanie h3 --- */
+    article.tutorial h3 {
+        counter-increment: h3counter;
+        counter-reset: h4counter;
+    }
+
+    article.tutorial h3::before {
+        content: counter(h2counter) "." counter(h3counter) " ";
+        font-weight: normal;
+        color: #777;
+    }
+
+    /* --- Numerowanie h4 (opcjonalnie) --- */
+    article.tutorial h4 {
+        counter-increment: h4counter;
+    }
+
+    article.tutorial h4::before {
+        content: counter(h2counter) "." counter(h3counter) "." counter(h4counter) " ";
+        font-weight: normal;
+        color: #999;
+    }
+
+    article.tutorial {
+        font: 400 16px/1.5 "Helvetica Neue", Helvetica, Arial, sans-serif;
+        color: #111;
+        background-color: #fbfbfb;
+        -webkit-text-size-adjust: 100%;
+        -webkit-font-feature-settings: "kern" 1;
+        -moz-font-feature-settings: "kern" 1;
+        -o-font-feature-settings: "kern" 1;
+        font-feature-settings: "kern" 1;
+        font-kerning: normal;
+        padding: 30px;
+    }
+
+    @media only screen and (max-width: 600px) {
+        article.tutorial {
+            padding: 5px;
+        }
+
+        article.tutorial>#content {
+            padding: 0px 20px 20px 20px !important;
+        }
+    }
+
+    article.tutorial>#content {
+        margin: 0px;
+        max-width: 900px;
+        border: 1px solid #e1e4e8;
+        padding: 10px 40px;
+        padding-bottom: 20px;
+        border-radius: 2px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    article.tutorial summary {
+        cursor: pointer;
+        text-decoration: underline;
+    }
+
+    article.tutorial hr {
+        color: #bbb;
+        background-color: #bbb;
+        height: 1px;
+        flex: 0 1 auto;
+        margin: 1em 0;
+        padding: 0;
+        border: none;
+    }
+
+    article.tutorial .hljs-operator {
+        color: #868686;
+        /* There is a bug where the syntax highlighter would pick no color for e.g. `&&` symbols in the code samples. Let's overwrite this */
+    }
+
+    /* Links */
+    article.tutorial a {
+        color: #0366d6;
+        text-decoration: none;
+    }
+
+    article.tutorial a:visited {
+        color: #0366d6;
+    }
+
+    article.tutorial a:hover {
+        color: #0366d6;
+        text-decoration: underline;
+    }
+
+    article.tutorial pre {
+        background-color: #f6f8fa;
+        border-radius: 3px;
+        font-size: 85%;
+        line-height: 1.45;
+        overflow: auto;
+        padding: 16px;
+    }
+
+    article.tutorial code {
+        background-color: rgba(27, 31, 35, .05);
+        border-radius: 3px;
+        font-size: 85%;
+        margin: 0;
+        word-wrap: break-word;
+        padding: .2em .4em;
+        font-family: SFMono-Regular, Consolas, Liberation Mono, Menlo, Courier, monospace;
+    }
+
+    article.tutorial pre>code {
+        background-color: transparent;
+        border: 0;
+        display: inline;
+        line-height: inherit;
+        margin: 0;
+        overflow: visible;
+        padding: 0;
+        word-wrap: normal;
+        font-size: 100%;
+    }
+
+    /* Blockquotes */
+    article.tutorial blockquote {
+        margin-left: 30px;
+        margin-top: 0px;
+        margin-bottom: 16px;
+        border-left-width: 3px;
+        padding: 0 1em;
+        color: #828282;
+        border-left: 4px solid #e8e8e8;
+        padding-left: 15px;
+        font-size: 18px;
+        letter-spacing: -1px;
+        font-style: italic;
+    }
+
+    article.tutorial blockquote * {
+        font-style: normal !important;
+        letter-spacing: 0;
+        color: #6a737d !important;
+    }
+
+    /* Tables */
+    article.tutorial table {
+        border-spacing: 2px;
+        display: block;
+        font-size: 14px;
+        overflow: auto;
+        width: 100%;
+        margin-bottom: 16px;
+        border-spacing: 0;
+        border-collapse: collapse;
+    }
+
+    article.tutorial td {
+        padding: 6px 13px;
+        border: 1px solid #dfe2e5;
+    }
+
+    article.tutorial th {
+        font-weight: 600;
+        padding: 6px 13px;
+        border: 1px solid #dfe2e5;
+    }
+
+    article.tutorial tr {
+        background-color: #fff;
+        border-top: 1px solid #c6cbd1;
+    }
+
+    article.tutorial table tr:nth-child(2n) {
+        background-color: #f6f8fa;
+    }
+
+    /* Others */
+    article.tutorial img {
+        max-width: 100%;
+    }
+
+    article.tutorial p {
+        line-height: 24px;
+        font-weight: 400;
+        font-size: 16px;
+        color: #24292e;
+    }
+
+    article.tutorial ul {
+        margin-top: 0;
+    }
+
+    article.tutorial li {
+        color: #24292e;
+        font-size: 16px;
+        font-weight: 400;
+        line-height: 1.5;
+    }
+
+    article.tutorial li+li {
+        margin-top: 0.25em;
+    }
+
+    article.tutorial * {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+        color: #24292e;
+    }
+
+    article.tutorial a:visited {
+        color: #0366d6;
+    }
+
+    article.tutorial h1,
+    article.tutorial h2,
+    article.tutorial h3 {
+        border-bottom: 1px solid #eaecef;
+        color: #111;
+        /* Darker */
+    }
+
+    article.tutorial code>* {
+        font-family: Consolas, "Liberation Mono", Menlo, Courier, monospace !important;
+    }
+</style>
