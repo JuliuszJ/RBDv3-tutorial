@@ -1,0 +1,624 @@
+<article class="tutorial">
+    <h1 id="logiczna-replikacja-strumieniowa-w-szbd-postgres">Logiczna
+        replikacja strumieniowa w SZBD Postgres</h1>
+    <p>
+        Replikacja strumieniowa zaprezentowana na poprzednich zajęciach jest
+        replikacją fizyczną. Oznacza to, że:
+    <ul>
+        <li>Zmiany we wszystkich obiektach podstawowej bazy danych są
+            replikowane do czuwających baz danych.</li>
+        <li>W danym momencie tylko jedna baza danych jest bazą podstawową, do
+            której użytkownicy mogą wprowadzać zmiany.</li>
+        <li>Czuwające bazy danych są uruchomione w trybie tylko do odczytu, w
+            związku z tym nie mogą posiadać własnych obiektów oprócz tych, które są
+            replikowane z podstawowej bazy danych.</li>
+    </ul>
+    Wady te łagodzi zastosowanie logicznej replikacji strumieniowej.
+    Mechanizm ten, podobnie jak wcześniej poznana fizyczna replikacja
+    strumieniowa, korzysta z dziennika bazy danych do transferu zmian w
+    obiektach między bazami danych. W nazewnictwie systemu Postgres pliki
+    dziennika bazy danych nazywane są WAL (ang. Write Ahead Log). Mechanizm
+    logicznej replikacji strumieniowej wykorzystuje dwa rodzaje baz danych:
+    <em>dostawcy</em> (ang. providers) i <em>subskrybenci</em> (ang.
+    subscribers). <em>Dostawcy</em> dostarczają dane, natomiast
+    <em>subskrybenci</em> replikują dane <em>dostawców</em>. Dane można
+    modyfikować zarówno w bazach typu <em>dostawca</em> jak i
+    <em>subskrybent</em>. Jednakże tylko zmiany wprowadzane w dostawcach są
+    replikowane do subskrybentów. Zmiany wprowadzone w subskrybentach
+    pozostają lokalne i mogą być przyczyną konfliktów. Logiczna replikacji
+    strumieniowa może być kaskadowa, to znaczy, że subskrybent może być
+    dostawcą dla innych subskrybentów.
+    </p>
+    <p>
+        Celem zajęć jest zapoznanie się z logiczną replikacją strumieniową
+        dostarczaną przez system Postgres od wersji 10.
+    </p>
+    <h2 id="przygotowanie-środowiska">Przygotowanie środowiska</h2>
+    <ol>
+        <li>Zaloguj się do maszyny wirtualnej jako użytkownik rbd używając
+            hasła RBD#2520.</li>
+        <li>Otwórz okno terminala, który nazwiemy terminalem
+            pomocniczym.</li>
+        <li>Usuń z klastra Kubernetes obiekty, które zostały utworzone w
+            poprzednim tutorialu, wykonaj w terminalu pomocniczym następujące
+            polecenia:
+
+            <pre><code>kubectl delete -f rbd-citus.yaml
+kubectl delete pvc pgsql-rbd-citus-disk-pgsql-citus-sts-0
+kubectl delete pvc pgsql-rbd-citus-disk-pgsql-citus-sts-1
+kubectl delete pvc pgsql-rbd-citus-disk-pgsql-citus-sts-2
+kubectl delete -f rbd-citus-coord.yaml
+kubectl delete pvc postgres-db-rbd-citus-coord-1-0
+kubectl delete pvc postgres-db-rbd-citus-coord-2-0
+kubectl delete pvc postgres-db-rbd-citus-coord-3-0
+kubectl delete pvc postgres-db-rbd-citus-coord-4-0
+kubectl delete -f rbd-citus-worker1.yaml
+kubectl delete pvc postgres-db-rbd-citus-worker1-1-0
+kubectl delete pvc postgres-db-rbd-citus-worker1-2-0
+kubectl delete -f rbd-citus-worker2.yaml
+kubectl delete pvc postgres-db-rbd-citus-worker2-1-0
+kubectl delete pvc postgres-db-rbd-citus-worker2-2-0
+</code></pre>
+        </li>
+        <li>Skorzystamy ze StatefulSet, które zostały zdefiniowane w
+            pierwszym tutorialu, w tym celu wykonaj w terminalu pomocniczym
+            następujące polecenia:
+
+            <pre><code>k3d image import rbd/postgres17:1.1 --cluster RBDcluster
+kubectl apply -f rbd1.yaml
+kubectl apply -f rbd2.yaml
+</code></pre>
+        </li>
+        <li>Monitoruj postęp wdrażanie manifestów:
+
+
+            <pre><code>kubectl get sts --watch</code></pre>
+        </li>
+        <li>Po zakończeniu wdrażania manifestów otwórz 2 nowe zakładki w
+            oknie terminala, pierwszą nazwij <em>provider-1</em>, a drugą
+            <em>subscriber-1</em>.</li>
+        <li>W terminalu <em>provider-1</em> uruchom poniższe polecenie w celu
+            przyłączenia się do bazy danych, którą nazwiemy <em>provider-1</em>.
+
+            <pre><code>psql -U postgres -h localhost -p 5432</code></pre>
+            <p>Użyj hasła rbd1 w celu uwierzytelnienia użytkownika postgres.</p>
+            <p>
+                <strong>Uwaga</strong>: jeżeli narzędzie psql nieoczekiwanie traci
+                połączenie ze serwerem zamiast adresu localhost użyj jednego z adresów
+                węzła loadbalancer. W celu pozyskania tych adresów użyj polecenia:
+                <code>kubectl get svc</code>. Wykorzystaj jeden z adresów z kolumny EXTERNAL-IP.
+            </p>
+        </li>
+
+        <li>W bazie danych <em>provider-1</em> zwiększ ilość informacji generowanych
+            do plików dziennika bazy danych, które umożliwią logiczną replikację. W
+            tym celu wykonaj polecenie:
+
+            <pre><code>alter system set wal_level=logical;</code></pre>
+        </li>
+
+        <li>W terminalu pomocniczym zrestartuj Pod obsługujący bazę danych
+            <em>provider-1</em>. Użyj polecenia:
+
+            <pre><code>kubectl rollout restart sts pgsql-rbd1</code></pre>
+        </li>
+
+        <li>W terminalu pomocniczym zrestartuj połączenie do bazy danych
+            <em>provider-1</em>. Możesz w tym celu wykonać dwukrotnie to samo polecenie,
+            np.:
+
+            <pre><code>show wal_level;</code></pre>
+        </li>
+    </ol>
+    <h2 id="strumieniowa-replikacja-logiczna-z-jednym-dostawcą.">Strumieniowa
+        replikacja logiczna z jednym dostawcą.</h2>
+
+    <ol>
+        <li>W bazie danych <em>provider-1</em> utwórz użytkownika <em>repl</em>, który
+            będzie służyć do uwierzytelnienia połączenia z bazy danych subskrybenta
+            do bazy danych dostawcy. Uruchom polecenie:
+
+            <pre><code>CREATE ROLE repl WITH REPLICATION LOGIN PASSWORD 'rbd1repl';</code></pre>
+        </li>
+
+        <li>W bazie danych <em>provider-1</em> utwórz obiekty, których zawartość
+            będzie replikowana, skorzystaj z poniższego polecenia:
+
+            <pre><code>\i ~/loggers/loggers.sql</code></pre>
+        </li>
+
+        <li>W bazie danych <em>provider-1</em> nadaj użytkownikowi <em>repl</em> prawa
+            odczytu do obiektów, które zostały utworzone w poprzednim kroku, użyj
+            poniższe polecenie:
+
+            <pre><code>GRANT select ON ALL TABLES IN SCHEMA public TO repl;</code></pre>
+            Polecenie to nadaje uprawnienia do wszystkich obecnie istniejących
+            tabel w schemacie public, czyli tylko tych, które zostały utworzone w
+            poprzednim kroku
+        </li>
+
+        <li>W celu udostępnienia wybranych tabel mechanizmowi logicznej
+            replikacji utwórz w bazie danych <em>provider-1</em> publikację o nazwie
+            <em>meas_publication</em>.
+
+            <pre><code>CREATE PUBLICATION meas_publication;</code></pre>
+        </li>
+
+        <li>W bazie danych <em>provider-1</em> dodaj do publikacji <em>meas_publication</em>
+            tabelę <em>organizations</em>. Skorzystaj z poniższego polecenia:
+
+            <pre><code>ALTER PUBLICATION meas_publication ADD TABLE organizations;</code></pre>
+        </li>
+
+        <li>W bazie danych <em>provider-1</em> sprawdź za pomocą poniższego polecenia
+            jakie publikacje znajdują się w bazie danych:
+
+            <pre><code>select pubname from pg_publication;</code></pre>
+        </li>
+
+        <li>W bazie danych <em>provider-1</em> zobacz jakie tabele zostały
+            opublikowane, w tym celu uruchom poniższe polecenie:
+
+            <pre><code>select * from pg_publication_tables;</code></pre>
+        </li>
+
+        <li>W terminalu <em>subscriber-1</em> uruchom poniższe polecenie w celu
+            przyłączenia się do bazy danych, którą nazwiemy <em>subscriber-1</em>.
+
+            <pre><code>psql -U postgres -h localhost -p 5433</code></pre>
+
+        </li>
+        <li>W bazie danych <em>subscriber-1</em> utwórz obiekty, do których będą
+            replikowana dane z obiektów dostawcy, skorzystaj z poniższego
+            polecenia:
+
+            <pre><code>\i ~/loggers/loggers.sql</code></pre>
+            Mechanizm logicznej replikacji nie propaguje operacji DDL. Dzięki
+            temu podejściu schematy obiektów w bazie danych dostawcy i subskrybenta
+            mogą być różne.
+        </li>
+
+        <li>W bazie danych <em>subscriber-1</em> utwórz subskrypcję <em>meas_subscription</em>,
+            która umożliwi replikację danych z bazy danych dostawcy do bazy danych
+            subskrybenta, uruchom poniższe polecenie:
+
+            <pre><code>CREATE SUBSCRIPTION meas_subscription CONNECTION
+'host=pgsql-rbd1-lb port=5432 user=repl password=rbd1repl
+dbname=postgres'
+PUBLICATION meas_publication;</code></pre>
+        </li>
+
+        <li>W bazie danych <em>subscriber-1</em> wyświetl utworzone subskrypcje,
+            skorzystaj z poniższego polecenia:
+
+            <pre><code>select * from pg_subscription;</code></pre>
+        </li>
+
+        <li>W bazie danych <em>provider-1</em> wstaw dane do tabeli
+            <em>organizations</em>:
+
+            <pre><code>\i ~/loggers/organizations.dmp</code></pre>
+        </li>
+
+        <li>W bazie danych <em>subscriber-1</em> wyświetl status replikacji:
+
+            <pre><code>select subname as substription_name, relname as table_name,
+case srsubstate
+when 'i' then 'initialize'
+when 'd' then 'data is being copied'
+when 's' then 'synchronized'
+when 'r' then 'ready (normal replication)'
+end
+from pg_subscription_rel r join pg_subscription s on
+r.srsubid=s.oid
+join pg_class c on r.srrelid=c.oid;
+</code></pre>
+        </li>
+        <li>W bazie danych <em>subscriber-1</em> sprawdź liczbę wierszy w tabeli
+            <em>organizations</em>. Czy replikacja zmian się powiodła? <mark>[Raport]</mark></li>
+        <li>W bazie danych <em>provider-1</em> dodaj tabelę <em>loggers</em> do publikacji
+            <em>meas_publication</em>. <mark>[Raport]</mark></li>
+        <li>W bazie danych <em>provider-1</em> wstaw dane do tabeli <em>loggers</em>:
+
+
+            <pre><code>\i ~/loggers/loggers.dmp</code></pre>
+        </li>
+
+        <li>W bazie danych <em>subscriber-1</em> sprawdź liczbę wierszy w tabeli
+            <em>loggers</em>. Czy replikacja zmian się powiodła? <mark>[Raport]</mark></li>
+        <li>Powtórz krok 13, czy w wyniku znajdują się informacje o statusie
+            replikacji tabeli <em>loggers</em>? <mark>[Raport]</mark></li>
+        <li>W bazie danych <em>subscriber-1</em> odśwież subskrypcję
+            <em>meas_subscription</em>:
+
+            <pre><code>ALTER SUBSCRIPTION meas_subscription REFRESH PUBLICATION;</code></pre>
+        </li>
+
+        <li>Powtórz krok 17 oraz 18.</li>
+        <li>Sprawdź replikację wyników operacji aktualizacji i usuwania
+            danych z tabeli <em>loggers</em> w bazie danych <em>provider-1</em>. <mark>[Raport]</mark></li>
+        <li>Sprawdź co się stanie jeżeli w trakcie wykonywania zmian w bazie
+            danych <em>provider-1</em> baza danych <em>subscriber-1</em> będzie niedostępna, wykonaj
+            następujący eksperyment <mark>[Raport]</mark>:
+            <ol type="a">
+                <li>Zmniejsz liczbę replik Pod bazy danych <em>subscriber-1</em> do
+                    zera</li>
+                <li>W bazie danych <em>provider-1</em> wprowadź zmiany do replikowanego
+                    obiektu.</li>
+                <li>Zwiększ liczbę replik Pod bazy danych <em>subscriber-1</em> do
+                    jednej</li>
+                <li>W bazie danych <em>subscriber-1</em> sprawdź czy zmiany zostały
+                    zreplikowane.</li>
+        </li>
+    </ol>
+    <li>Sprawdź definicję parametru <a
+            href="https://www.postgresql.org/docs/17/runtime-config-replication.html#GUC-WAL-KEEP-SIZE">wal_keep_size</a>.
+        Jak jego wartość może mieć wpływ na wynik eksperymentu z kroku 22?
+        <mark>[Raport]</mark>
+    </li>
+    </ol>
+    <h2 id="strumieniowa-replikacja-logiczna-z-wieloma-dostawcami.">Strumieniowa
+        replikacja logiczna z wieloma dostawcami.</h2>
+    <ol>
+        <li>Utwórz nowy StatefulSet, który będzie zawierał bazę danych
+            <em>provider-2</em>. W tym celu skopiuj plik manifestów rbd2.yaml do pliku
+            rbd3.yaml. Za pomocą ulubionego edytora zamień w pliku rbd3.yaml
+            wszystkie napisy rbd2 na rbd3, zamień również port wykorzystywany przez
+            loadbalancer z 5433 na 5434. Wykonaj wdrożenie manifestów znajdujących
+            się w pliku rbd3.yaml.</li>
+        <li>W oknie terminalu otwórz nową zakładkę w oknie terminala, nazwij
+            ją <em>provider-2</em>.</li>
+        <li>W terminalu <em>provider-2</em> uruchom poniższe polecenie w celu
+            przyłączenia się do bazy danych, którą nazwiemy <em>provider-2</em>.
+
+            <pre><code>psql -U postgres -h localhost -p 5434</code></pre>
+        </li>
+
+        <li>W bazie danych <em>provider-2</em>:
+            <ol type="a">
+                <li>Zmień odpowiednio wartość parametru wal_level i zrestartuj bazę
+                    danych <em>provider-2</em></li>
+                <li>Utwórz tabele korzystając ze skryptu
+                    <em>~/loggers/loggers.sql</em>
+                </li>
+                <li>Utwórz użytkownika repl</li>
+                <li>Nadaj użytkownikowi repl uprawnienia do obiektów utworzonych za
+                    pomocą skryptu <em>~/loggers/loggers.sql</em></li>
+            </ol>
+        <li>Utwórz publikację <em>meas2_publication</em> i dodaj do niej tabelę
+            <em>organizations</em></li>
+        </li>
+        <li>W bazie danych <em>subscriber-1</em> utwórz subskrypcję
+            <em>meas2_subscription</em>, która umożliwi replikację danych z bazy danych
+            <em>provider-2</em>.</li>
+        <li>W bazie danych <em>provider-2</em> dodaj organizację o identyfikatorze
+            -40. Czy zmiany przepropagowały się do baz danych <em>subscriber-1</em>?
+            <mark>[Raport]</mark>
+        </li>
+        <li>Przeprowadź eksperyment wprowadzenia konfliktu przez wstawienie
+            do bazy danych <em>provider-2</em> organizacji, która już istnieje w bazie danych
+            <em>provider-1</em> i <em>subscriber-1</em>. Wykonaj bazie danych <em>provider-2</em> sekwencję
+            następujących operacji:
+
+            <pre><code>insert into organizations values(50, 'Konflitowa', 'CLIENT');
+select pg_current_wal_lsn ();
+insert into organizations values(-50, 'Nie Konflitowa', 'CLIENT');</code>
+</pre>
+            Funkcja <em>pg_current_wal_lsn</em>() zwraca bieżącą pozycję zapisu w
+            pliku WAL.
+
+        </li>
+        <li>W bazie danych <em>subscriber-1</em> sprawdź wartości dla organizacji o
+            identyfikatorach 50 i -50. Czy propagacja zmian się powiodła?
+            <mark>[Raport]</mark>
+        </li>
+        <li>Sprawdź w logu bazy danych <em>subscriber-1</em> co się wydarzyło. W tym
+            celu w terminalu pomocniczym najpierw zwiększ limit otwartych
+            plików:</li>
+
+        <pre><code>ulimit -n 65536</code></pre>
+        i następnie uruchom poniższe polecenie:
+        <pre><code>kubectl logs pgsql-rbd2-0 -f</code></pre>
+
+        <li>W celu rozwiązania konfliktu pominiemy w bazie danych
+            <em>subscriber-1</em> wstawienie "konfliktowej" organizacji.
+
+        <li>Wykonaj poniższe polecenie:</li>
+
+        <pre><code>select s.subname, r.*
+from pg_subscription s join pg_replication_origin_status r
+on concat('pg_',s.oid)=r.external_id;
+</code>
+</pre>
+        Odczytaj wartość kolumny external_id dla subskrypcji
+        <em>meas2_subscription</em>.
+        </li>
+
+        <li>Wykonaj poniższe polecenie, użyj odpowiednio external_id
+            uzyskanego w punkcie 10.1 oraz WAL LSN uzyskanego w punkcie 7:</li>
+
+        <pre><code>select pg_replication_origin_advance('external_id','WAL LSN');</code></pre>
+
+        <li>Sprawdź w terminalu pomocniczym nowe wpisy w logu bazy danych
+            <em>subscriber-1</em>. Czy replikacja została wznowiona? <mark>[Raport]</mark></li>
+        <li>W bazie danych <em>subscriber-1</em> sprawdź wartości dla organizacji o
+            identyfikatorach 50 i -50. Wyjaśnij uzyskany wynik <mark>[Raport]</mark></li>
+    </ol>
+    <h2 id="przydatne-polecenia-do-diagnostyki-błędu-zbyt-wielu-otwartych-plików">Dodatek: Przydatne
+        polecenia do diagnostyki błędu zbyt wielu otwartych plików</h2>
+    <ul>
+        <li>
+            Sprawdzenie liczby aktualnie otwartych plików przez procesy
+            użytkownika rbd:
+            <pre><code>sudo lsof -u rbd | wc -l</code></pre>
+        </li>
+        <li>
+            Zwiększenie liczby otwartych w bieżącej powłoce
+            <pre><code>ulimit -n 65536</code></pre>
+        </li>
+        <li>
+            Zwiększenie liczby otwartych plików przez użytkownika, wymaga
+            restartu systemu
+<pre><code>sudo tee -a /etc/systemd/user.conf &lt;&lt;EOF
+DefaultLimitNOFILE=65536
+EOF
+</code></pre>
+        </li>
+        <li>
+            Zwiększenie liczby otwartych plików w systemie, wymaga restartu
+            systemu
+<pre><code>sudo tee -a /etc/security/limits.conf &lt;&lt;EOF
+* soft nofile 65536
+* hard nofile 65536
+root soft nofile 65536
+root hard nofile 65536
+EOF
+</code></pre>
+        </li>
+
+    </ul>
+</article>
+<style type="text/css">
+    /* Ograniczamy działanie liczników tylko do artykułu z klasą .tutorial */
+    article.tutorial {
+        counter-reset: h2counter;
+        /* reset głównego licznika */
+    }
+
+    /* --- Numerowanie h2 --- */
+    article.tutorial h2 {
+        counter-increment: h2counter;
+        /* zwiększamy licznik h2 */
+        counter-reset: h3counter;
+        /* resetujemy podrzędne liczniki */
+    }
+
+    article.tutorial h2::before {
+        content: counter(h2counter) ". ";
+        font-weight: normal;
+        color: #555;
+    }
+
+    /* --- Numerowanie h3 --- */
+    article.tutorial h3 {
+        counter-increment: h3counter;
+        counter-reset: h4counter;
+    }
+
+    article.tutorial h3::before {
+        content: counter(h2counter) "." counter(h3counter) " ";
+        font-weight: normal;
+        color: #777;
+    }
+
+    /* --- Numerowanie h4 (opcjonalnie) --- */
+    article.tutorial h4 {
+        counter-increment: h4counter;
+    }
+
+    article.tutorial h4::before {
+        content: counter(h2counter) "." counter(h3counter) "." counter(h4counter) " ";
+        font-weight: normal;
+        color: #999;
+    }
+
+    article.tutorial {
+        font: 400 16px/1.5 "Helvetica Neue", Helvetica, Arial, sans-serif;
+        color: #111;
+        background-color: #fbfbfb;
+        -webkit-text-size-adjust: 100%;
+        -webkit-font-feature-settings: "kern" 1;
+        -moz-font-feature-settings: "kern" 1;
+        -o-font-feature-settings: "kern" 1;
+        font-feature-settings: "kern" 1;
+        font-kerning: normal;
+        padding: 30px;
+    }
+
+    @media only screen and (max-width: 600px) {
+        article.tutorial {
+            padding: 5px;
+        }
+
+        article.tutorial>#content {
+            padding: 0px 20px 20px 20px !important;
+        }
+    }
+
+    article.tutorial>#content {
+        margin: 0px;
+        max-width: 900px;
+        border: 1px solid #e1e4e8;
+        padding: 10px 40px;
+        padding-bottom: 20px;
+        border-radius: 2px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    article.tutorial summary {
+        cursor: pointer;
+        text-decoration: underline;
+    }
+
+    article.tutorial hr {
+        color: #bbb;
+        background-color: #bbb;
+        height: 1px;
+        flex: 0 1 auto;
+        margin: 1em 0;
+        padding: 0;
+        border: none;
+    }
+
+    article.tutorial .hljs-operator {
+        color: #868686;
+        /* There is a bug where the syntax highlighter would pick no color for e.g. `&&` symbols in the code samples. Let's overwrite this */
+    }
+
+    /* Links */
+    article.tutorial a {
+        color: #0366d6;
+        text-decoration: none;
+    }
+
+    article.tutorial a:visited {
+        color: #0366d6;
+    }
+
+    article.tutorial a:hover {
+        color: #0366d6;
+        text-decoration: underline;
+    }
+
+    article.tutorial pre {
+        background-color: #f6f8fa;
+        border-radius: 3px;
+        font-size: 85%;
+        line-height: 1.45;
+        overflow: auto;
+        padding: 16px;
+    }
+
+    article.tutorial code {
+        background-color: rgba(27, 31, 35, .05);
+        border-radius: 3px;
+        font-size: 85%;
+        margin: 0;
+        word-wrap: break-word;
+        padding: .2em .4em;
+        font-family: SFMono-Regular, Consolas, Liberation Mono, Menlo, Courier, monospace;
+    }
+
+    article.tutorial pre>code {
+        background-color: transparent;
+        border: 0;
+        display: inline;
+        line-height: inherit;
+        margin: 0;
+        overflow: visible;
+        padding: 0;
+        word-wrap: normal;
+        font-size: 100%;
+    }
+
+    /* Blockquotes */
+    article.tutorial blockquote {
+        margin-left: 30px;
+        margin-top: 0px;
+        margin-bottom: 16px;
+        border-left-width: 3px;
+        padding: 0 1em;
+        color: #828282;
+        border-left: 4px solid #e8e8e8;
+        padding-left: 15px;
+        font-size: 18px;
+        letter-spacing: -1px;
+        font-style: italic;
+    }
+
+    article.tutorial blockquote * {
+        font-style: normal !important;
+        letter-spacing: 0;
+        color: #6a737d !important;
+    }
+
+    /* Tables */
+    article.tutorial table {
+        border-spacing: 2px;
+        display: block;
+        font-size: 14px;
+        overflow: auto;
+        width: 100%;
+        margin-bottom: 16px;
+        border-spacing: 0;
+        border-collapse: collapse;
+    }
+
+    article.tutorial td {
+        padding: 6px 13px;
+        border: 1px solid #dfe2e5;
+    }
+
+    article.tutorial th {
+        font-weight: 600;
+        padding: 6px 13px;
+        border: 1px solid #dfe2e5;
+    }
+
+    article.tutorial tr {
+        background-color: #fff;
+        border-top: 1px solid #c6cbd1;
+    }
+
+    article.tutorial table tr:nth-child(2n) {
+        background-color: #f6f8fa;
+    }
+
+    /* Others */
+    article.tutorial img {
+        max-width: 100%;
+    }
+
+    article.tutorial p {
+        line-height: 24px;
+        font-weight: 400;
+        font-size: 16px;
+        color: #24292e;
+    }
+
+    article.tutorial ul {
+        margin-top: 0;
+    }
+
+    article.tutorial li {
+        color: #24292e;
+        font-size: 16px;
+        font-weight: 400;
+        line-height: 1.5;
+    }
+
+    article.tutorial li+li {
+        margin-top: 0.25em;
+    }
+
+    article.tutorial * {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+        color: #24292e;
+    }
+
+    article.tutorial a:visited {
+        color: #0366d6;
+    }
+
+    article.tutorial h1,
+    article.tutorial h2,
+    article.tutorial h3 {
+        border-bottom: 1px solid #eaecef;
+        color: #111;
+        /* Darker */
+    }
+
+    article.tutorial code>* {
+        font-family: Consolas, "Liberation Mono", Menlo, Courier, monospace !important;
+    }

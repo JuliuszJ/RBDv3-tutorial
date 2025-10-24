@@ -155,13 +155,13 @@ unzip loggers.zip
             Skopiuj katalog <em>loggers</em> do katalogu <em>/data</em>
             repliki pgsql-citus-sts-0.<br />
             Użyj poniższego polecenia:
-            <p>kubectl cp loggers pgsql-citus-sts-0:/data</p>
+            <pre><code>kubectl cp loggers pgsql-citus-sts-0:/data</code></pre>
         </li>
         <li>
             W terminalu pgsql-citus-sts-0 wykonaj poniższe polecenie aby
             uruchomić powłokę w replice pgsql-citus-sts-0. Replika ta będzie
             obsługiwać węzeł koordynatora klastra Citus.
-            <p>kubectl exec -it pgsql-citus-sts-0 -- /bin/bash</p>
+            <pre><code>kubectl exec -it pgsql-citus-sts-0 -- /bin/bash</code></pre>
         </li>
         <li>
             W tym samym terminalu uruchom narzędzie <em>psql</em> w celu
