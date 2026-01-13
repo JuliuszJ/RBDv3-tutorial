@@ -1,0 +1,473 @@
+<article class="markdown-body"><h1 class="atx" id="vi-przetwarzanie-rozproszone-w-szbd-oracle">VI. Przetwarzanie rozproszone w SZBD Oracle</h1>
+<p>Celem zajęć jest zapoznanie się z własnościami SZBD Oracle umożliwiającymi przetwarzanie rozproszone. Własności te obejmują:</p>
+<ul>
+<li><p>Transparenty dostęp do zdalnych danych.</p>
+</li>
+<li><p>Rozproszone transakcje.</p>
+</li>
+</ul>
+<h2 class="atx" id="utworzenie-baz-danych">Utworzenie baz danych</h2>
+<p>W celu przygotowania środowiska do ilustracji własności przetwarzania rozproszonego należy utworzyć 2 bazy danych. Wykonaj poniższe kroki aby utworzyć dwie bazy danych, jedną o nazwie <em>RBD1</em> i drugą o nazwie <em>RBD2</em>.</p>
+<ol>
+<li><p>Zaloguj się do maszyny wirtualnej jako użytkownik rbd używając hasła RBD#7102.</p>
+</li>
+<li><p>Otwórz okno terminala, który nazwiemy terminalem pomocniczym.</p>
+</li>
+<li><p>Pobierz plik manifestów za pomocą poniższego polecenia:</p>
+<pre><code class="fenced-code-block">wget www.cs.put.poznan.pl/jjezierski/RBDv2/ora1.yaml</code></pre>
+</li>
+<li><p>Otwórz plik manifestów w celu jego przeglądnięcia za pomocą polecenia:</p>
+<pre><code class="fenced-code-block">less ora1.yaml</code></pre>
+</li>
+<li><p>Rozpocznij wdrożenie komponentów z pliku manifestów za pomocą polecenia:</p>
+<pre><code class="fenced-code-block">kubectl apply -f ora1.yaml</code></pre>
+</li>
+<li><p>Obserwuj postęp wdrożenia <em>StatefulSet</em> wykorzystując poniższe polecenie:</p>
+<pre><code class="fenced-code-block">kubectl get sts --watch</code></pre>
+<p>Wdrożenie zajmie chwilę ponieważ obraz kontenera ma objętość ponad 3GiB.</p>
+</li>
+<li><p>Pomimo zakończenia wdrożenia, baza danych w Pod nie została jeszcze zainicjalizowana, sprawdź postęp inicjalizacji wydając w terminalu pomocniczym poniższe polecenie, które wyświetla dziennik Pod:</p>
+<pre><code class="fenced-code-block">kubectl logs ora-rbd1-0 -f</code></pre>
+<p>Poczekaj aż pojawi się napis <em>DATABASE IS READY TO USE!</em>. Przerwij wykonanie polecenia i przejdź do następnego punktu.</p>
+</li>
+<li><p>Skopiuj plik manifestów do pliku ora2.yaml:</p>
+<pre><code class="fenced-code-block">cp ora1.yaml ora2.yaml</code></pre>
+</li>
+<li><p>Użyj swojego ulubionego edytora tekstu wykonać następujące zmiany w pliku ora2.yaml <mark>[Raport]</mark>:</p>
+<ul>
+<li><p>zamień wszystkie wystąpienia tekstu rbd1 na rbd2,</p>
+</li>
+<li><p>ustal w drugim manifeście wartość klucza spec.ports.port na 1522.</p>
+</li>
+</ul>
+</li>
+<li><p>Wykonaj wdrożenie zawartości pliku ora2.yaml, poczekaj na zakończenie inicjalizacji bazy danych. <mark>[Raport]</mark></p>
+</li>
+<li><p>Pobierz skrypty SQL wykonując w terminalu pomocniczym polecenia:</p>
+<pre><code class="fenced-code-block">wget www.cs.put.poznan.pl/jjezierski/RBDv2/pracownicy.sql
+wget www.cs.put.poznan.pl/jjezierski/RBDv2/zespoly.sql</code></pre>
+</li>
+<li><p>W terminalu pomocniczym skopiuj plik pracownicy.sql do katalogu /opt/oracle/oradata repliki ora-rbd1-0. Użyj poniższego polecenia:</p>
+<pre><code class="fenced-code-block">kubectl cp pracownicy.sql ora-rbd1-0:/opt/oracle/oradata</code></pre>
+</li>
+<li><p>W terminalu pomocniczym skopiuj plik zespoly.sql do katalogu /opt/oracle/oradata repliki ora-rbd2-0. Użyj poniższego polecenia:</p>
+<pre><code class="fenced-code-block">kubectl cp zespoly.sql ora-rbd2-0:/opt/oracle/oradata</code></pre>
+</li>
+<li><p>Otwórz dwie kolejne zakładki terminala o nazwach ora-rbd1-0 i ora-rbd2-0. Pierwszy terminal o nazwie <em>rbd1</em> będzie służył do operowania na bazie danych <em>rbd1</em>, natomiast drugi terminal o nazwie <em>rbd2</em> będzie wykorzystywany do wykonywania operacji na bazie danych <em>rbd2</em>.</p>
+</li>
+<li><p>W terminalu ora-rbd1-0 wykonaj poniższe polecenie aby uruchomić powłokę w replice ora-rbd1-0. Replika ta będzie obsługiwać bazę danych, którą będziemy dalej nazywać rbd1.</p>
+<pre><code class="fenced-code-block">kubectl exec -it ora-rbd1-0 -- /bin/bash</code></pre>
+</li>
+<li><p>W powłoce repliki zrób kopie zapasowe plików konfiguracyjnych:</p>
+<pre><code class="fenced-code-block">cp -R /opt/oracle/oradata/dbconfig /opt/oracle/oradata/dbconfig.bak</code></pre>
+</li>
+<li><p>W terminalu <em>rbd1</em> dopisz do pliku <em>tnsnames.ora</em> deskryptor połączenia do bazy danych <em>rbd1</em> i <em>rbd2</em>:</p>
+<pre><code class="fenced-code-block">cat &lt;&lt;EOT&gt;&gt; /opt/oracle/oradata/dbconfig/XE/tnsnames.ora
+RBD1 =(DESCRIPTION = (ADDRESS_LIST =
+  (ADDRESS = (PROTOCOL = TCP)(HOST = ora-rbd1-lb)(PORT = 1521)))
+  (CONNECT_DATA =(SERVICE_NAME = XEPDB1)))
+RBD2 =(DESCRIPTION = (ADDRESS_LIST =
+  (ADDRESS = (PROTOCOL = TCP)(HOST = ora-rbd2-lb)(PORT = 1522)))
+  (CONNECT_DATA =(SERVICE_NAME = XEPDB1)))
+EOT</code></pre>
+</li>
+<li><p>W terminalu <em>rbd1</em> sprawdź komunikację procesami nasłuchu (ang. listner) baz danych RBD1 i RBD2:</p>
+<pre><code class="fenced-code-block">tnsping RBD1
+tnsping RBD2</code></pre>
+</li>
+<li><p>W terminalu rbd1 przetestuj za pomocą narzędzia <code>sqlplus</code> zdalne przyłączenie do bazy danych RBD2:</p>
+<pre><code class="fenced-code-block">sqlplus system/rbd2@RBD2</code></pre>
+<p>Opuść narzędzie sqlplus za pomocą polecenia <code>exit</code>.</p>
+</li>
+<li><p>W terminalu rbd1 przyłącz się za pomocą narzędzia sqlplus do bazy danych RBD1:</p>
+<pre><code class="fenced-code-block">sqlplus system/rbd1@RBD1</code></pre>
+</li>
+<li><p>W bazie danych <em>rbd1</em> utwórz użytkownika <em>rbd</em> z hasłem <em>RBD#7102</em>:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">create</span> <span class="token keyword">user</span> rbd identified <span class="token keyword">by</span> <span class="token string">"RBD#7102"</span>
+quota unlimited <span class="token keyword">on</span> users<span class="token punctuation">;</span>
+<span class="token keyword">grant</span> dba <span class="token keyword">to</span> rbd<span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>W bazie danych <em>rbd1</em> przełącz się na użytkownika <em>rbd</em>:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">connect</span> rbd<span class="token operator">/</span><span class="token string">"RBD#7102"</span><span class="token variable">@rbd1</span></code></pre>
+</li>
+<li><p>Wykonaj odpowiednio zmodyfikowane kroki od 15 do 22 dla bazy danych RBD2. Zwróć uwagę, że loadbalancer dla usługi bazy danych RBD1 nasłuchuje na porcie 1521.</p>
+</li>
+</ol>
+<h2 class="atx" id="transparentny-dostep-do-zdalnych-danych">Transparentny dostęp do zdalnych danych</h2>
+<p>Celem tego punktu jest zaprezentowanie mechanizmów dostępu do zdalnych danych za pomocą łączników bazy danych oraz synonimów celu zapewnienia transparentnego dostępu do danych.</p>
+<ol>
+<li><p>W bazie danych <em>rbd1</em> utwórz tabelę <em>pracownicy</em> uruchamiając skrypt w narzędziu <em>psql</em> poleceniem <code>@ /opt/oracle/oradata/pracownicy.sql</code>.</p>
+</li>
+<li><p>W bazie danych <em>rbd2</em> utwórz tabelę <em>zespoly</em> uruchamiając skrypt /opt/oracle/oradata/zespoly.sql.</p>
+</li>
+<li><p>Utwórz w bazie danych <em>rbd1</em> <a href="http://docs.oracle.com/database/121/SQLRF/statements_5006.htm#SQLRF01205">łącznik do bazy
+danych</a>
+<em>rbd2</em> za pomocą poniższego polecenia:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">CREATE</span> <span class="token keyword">DATABASE</span> LINK RBD<span class="token variable">@RBD2</span>
+<span class="token keyword">CONNECT</span> <span class="token keyword">TO</span> rbd IDENTIFIED <span class="token keyword">BY</span> "RBD<span class="token comment">#7102"</span>
+<span class="token keyword">USING</span> <span class="token string">'rbd2'</span><span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>W bazie danych <em>rbd1</em> wykonaj poniższe polecenie testujące zdalny
+dostęp do tabeli <em>zespoly</em>:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">SELECT</span> <span class="token operator">*</span> <span class="token keyword">FROM</span> zespoly<span class="token variable">@RBD</span><span class="token variable">@RBD2</span><span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>W bazie danych <em>rbd1</em> utwórz <a href="http://docs.oracle.com/database/121/SQLRF/statements_7001.htm#SQLRF01401">synonim</a> do zdalnej tabeli <em>zespoly:</em></p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">CREATE</span> SYNONYM zespoly <span class="token keyword">FOR</span> zespoly<span class="token variable">@RBD</span><span class="token variable">@RBD2</span><span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>W bazie danych <em>rbd1</em> przetestuj transparentny dostęp do tabeli
+<em>zespoly</em>:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">SELECT</span> nazwisko<span class="token punctuation">,</span> nazwa <span class="token keyword">FROM</span> pracownicy <span class="token keyword">natural</span> <span class="token keyword">join</span> zespoly<span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>Utwórz w bazie danych RBD2 odpowiednie obiekty umożliwiające zdalny dostęp do tabeli <em>pracownicy</em> znajdującej się w bazie danych RBD1. <mark>[Raport]</mark></p>
+</li>
+</ol>
+<h2 class="atx" id="rozproszone-transakcje">Rozproszone transakcje</h2>
+<p>Celem zadania jest przedstawienie własności rozproszonych transakcji, czyli takich
+transakcji, które modyfikują dane więcej niż w jednej bazie danych. System Oracle do zapewnienia atomowości operacji zatwierdzenia transakcji wykorzystuje Two Phase Commit (2PC) z pewną modyfikacją. Modyfikacja ta polega na wprowadzeniu wyróżnionego węzła zatwierdzania transakcji (ang. commit point site). Zapoznaj się z dokumentacją
+dotyczącą <a href="https://docs.oracle.com/database/121/ADMIN/ds_txns.htm#ADMIN-GUID-51F21E1B-B735-48DC-8500-94DACAA863A0">węzła zatwierdzania</a>.</p>
+<h3 class="atx" id="rozproszona-transakcja-zakonczona-sukcesem">Rozproszona transakcja zakończona sukcesem</h3>
+<ol>
+<li><p>W terminalu <em>rbd1</em> za pomocą narzędzia <em>sqlplus</em> wykonaj w bazie danych RBD1 poniższą transakcję rozproszoną:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">update</span> zespoly <span class="token keyword">set</span> adres<span class="token operator">=</span><span class="token string">'PIOTROWO 1'</span><span class="token keyword">where</span> id_zesp<span class="token operator">=</span><span class="token number">10</span><span class="token punctuation">;</span>
+<span class="token keyword">update</span> pracownicy <span class="token keyword">set</span> placa_pod<span class="token operator">=</span><span class="token number">999</span> <span class="token keyword">where</span> id_prac<span class="token operator">=</span><span class="token number">100</span><span class="token punctuation">;</span>
+<span class="token keyword">commit</span><span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>Sprawdź w terminalu rbd2 stan tabel <em>pracownicy</em> i <em>zespoly</em>. Czy posiadają one zmiany wprowadzone przez transakcję z poprzedniego punktu? <mark>[Raport]</mark></p>
+</li>
+</ol>
+<h3 class="atx" id="rozproszona-transakcja-zakonczona-awaria">Rozproszona transakcja zakończona awarią</h3>
+<p>System Oracle posiada narzędzie diagnostycznych w celu wywołania awarii podczas wykonywania operacji COMMIT. Do tego celu służy polecenie <code>commit comment 'ORA-2PC-CRASH-TEST-n'</code>, gdzie n przybiera następujące wartości:</p>
+<pre><code class="fenced-code-block">1 - Crash commit point site after collect
+2 - Crash non-commit point site after collect
+3 - Crash before prepare (non-commit point site)
+4 - Crash after prepare (non-commit point site)
+5 - Crash commit point site before commit
+6 - Crash commit point site after commit
+7 - Crash non-commit point site before commit
+8 - Crash non-commit point site after commit
+9 - Crash commit point site before forget
+10 - Crash non-commit point site before forget</code></pre>
+<ol>
+<li><p>W bazie danych <em>RBD1</em> wykonaj rozproszoną transakcję:</p>
+<pre><code class="fenced-code-block language-sql">  <span class="token keyword">update</span> zespoly <span class="token keyword">set</span> adres<span class="token operator">=</span><span class="token string">'PIOTROWO 2'</span><span class="token keyword">where</span> id_zesp<span class="token operator">=</span><span class="token number">10</span><span class="token punctuation">;</span>
+<span class="token keyword">update</span> pracownicy <span class="token keyword">set</span> placa_pod<span class="token operator">=</span><span class="token number">888</span> <span class="token keyword">where</span> id_prac<span class="token operator">=</span><span class="token number">100</span><span class="token punctuation">;</span>
+<span class="token keyword">commit</span> <span class="token keyword">comment</span> <span class="token string">'ORA-2PC-CRASH-TEST-4'</span><span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>W bazie danych <em>RBD2</em> stan tabel <em>pracownicy</em> i <em>zespoly</em>. Czy posiadają one zmiany wprowadzone przez transakcję z poprzedniego punkty? Dlaczego? <mark>[Raport]</mark></p>
+</li>
+<li><p>W bazie danych <em>RBD1</em> wykonaj rozproszoną transakcję:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">update</span> zespoly <span class="token keyword">set</span> adres<span class="token operator">=</span><span class="token string">'PIOTROWO 3'</span><span class="token keyword">where</span> id_zesp<span class="token operator">=</span><span class="token number">10</span><span class="token punctuation">;</span>
+<span class="token keyword">update</span> pracownicy <span class="token keyword">set</span> placa_pod<span class="token operator">=</span><span class="token number">777</span> <span class="token keyword">where</span> id_prac<span class="token operator">=</span><span class="token number">100</span><span class="token punctuation">;</span>
+<span class="token keyword">commit</span> <span class="token keyword">comment</span> <span class="token string">'ORA-2PC-CRASH-TEST-6'</span><span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>W bazie danych <em>RBD2</em> stan tabel <em>pracownicy</em> i <em>zespoly</em>. Czy posiadają one zmiany wprowadzone przez transakcję z poprzedniego punktu? Dlaczego? <mark>[Raport]</mark></p>
+</li>
+</ol>
+<h3 class="atx" id="rozproszona-transakcja-zakonczona-awaria----reczne-odtwarzanie">Rozproszona transakcja zakończona awarią -- ręczne odtwarzanie</h3>
+<p>W scenariuszach awarii z poprzedniego punktu, skutki awarii były automatycznie naprawiane. W taki sposób system będzie się zachowywał gdy zostanie przywrócona komunikacja między uczestnikami rozproszonej transakcji. W ramach poniższych scenariuszy awarii, komunikacja między uczestnikami transakcji nie będzie przywrócona i wystąpi potrzeba ręcznego odtworzenia transakcji.</p>
+<ol>
+<li><p>W bazie danych <em>RBD1</em> ustaw parametr COMMIT_POINT_STRENGTH:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">alter</span> system <span class="token keyword">set</span> COMMIT_POINT_STRENGTH<span class="token operator">=</span><span class="token number">10</span> scope<span class="token operator">=</span>spfile<span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>W bazie danych <em>RBD2</em> ustaw parametr COMMIT_POINT_STRENGTH:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">alter</span> system <span class="token keyword">set</span> COMMIT_POINT_STRENGTH<span class="token operator">=</span><span class="token number">20</span> scope<span class="token operator">=</span>spfile<span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>Zrestartuj bazę danych <em>RBD1</em> wykonując w terminalu pomocniczym następujące polecenie:</p>
+<pre><code class="fenced-code-block">kubectl rollout restart sts ora-rbd1</code></pre>
+</li>
+<li><p>Nawiąż ponownie połączenie do bazy danych RBD1 z wykorzystaniem terminala ora-rdb1-0 i programu sqlplus. Użyj danych uwierzytelnienia użytkownika rbd. Nie zapomnij o ustawieniu zmiennych środowiskowych.</p>
+</li>
+<li><p>Zastosuj odpowiednio poprzednie 2 punkty dla bazy danych RBD2.</p>
+</li>
+<li><p>Która baza danych będzie węzłem zatwierdzania rozproszonych transakcji? Dlaczego? <mark>[Raport]</mark></p>
+</li>
+<li><p>W bazie danych <em>RBD1</em> wyłącz automatyczne odtwarzanie transakcji, które zakończyły się awarią, tę operację trzeba będzie wykonać w bazie danych XE, która jest kontenerem dla bazy danych RDB1:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">connect</span> system<span class="token operator">/</span>rbd1<span class="token variable">@XE</span>
+<span class="token keyword">ALTER</span> SYSTEM <span class="token keyword">DISABLE</span> <span class="token keyword">DISTRIBUTED</span> RECOVERY<span class="token punctuation">;</span>
+<span class="token keyword">connect</span> rbd<span class="token operator">/</span>RBD<span class="token comment">#7102@rbd1</span></code></pre>
+</li>
+<li><p>W bazie danych <em>RBD2</em> wyłącz automatyczne odtwarzanie transakcji.</p>
+</li>
+<li><p>W bazie danych <em>RBD1</em> wykonaj rozproszoną transakcję, zakończoną symulacją błędu w trakcie wykonywania algorytmu 2PC:</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">update</span> zespoly <span class="token keyword">set</span> adres<span class="token operator">=</span><span class="token string">'PIOTROWO 4'</span><span class="token keyword">where</span> id_zesp<span class="token operator">=</span><span class="token number">10</span><span class="token punctuation">;</span>
+<span class="token keyword">update</span> pracownicy <span class="token keyword">set</span> placa_pod<span class="token operator">=</span><span class="token number">666</span> <span class="token keyword">where</span> id_prac<span class="token operator">=</span><span class="token number">100</span><span class="token punctuation">;</span>
+<span class="token keyword">commit</span> <span class="token keyword">comment</span> <span class="token string">'ORA-2PC-CRASH-TEST-4'</span><span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>W bazie danych <em>RBD2</em> sprawdź informację o zespole 10. <mark>[Raport]</mark></p>
+</li>
+<li><p>W bazie danych <em>RBD1</em> spróbuj zmodyfikować informację o pracowniku 100. (To już będzie nowa transakcja, poprzednia została zatwierdzona.) Co się stało? Dlaczego? <mark>[Raport]</mark></p>
+</li>
+<li><p>Wycofaj nieudane zmiany z poprzedniego punktu.</p>
+</li>
+<li><p>W bazie danych <em>RBD1</em> wyświetl niedokończone rozproszone transakcje.</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">select</span> LOCAL_TRAN_ID<span class="token punctuation">,</span> GLOBAL_TRAN_ID<span class="token punctuation">,</span> STATE <span class="token keyword">from</span> DBA_2PC_PENDING<span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>W bazie danych <em>RBD1</em> wyświetl uczestników rozproszonej transakcji.</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">select</span> LOCAL_TRAN_ID<span class="token punctuation">,</span> INTERFACE<span class="token punctuation">,</span> <span class="token keyword">DATABASE</span> <span class="token keyword">from</span> DBA_2PC_NEIGHBORS<span class="token punctuation">;</span></code></pre>
+</li>
+<li><p>Sprawdź w dokumentacji jakie dane są wyświetlane w kolumnie INTERFACE i co oznaczają w kontekście interesującej transakcji.<mark>[Raport]</mark></p>
+</li>
+<li><p>Wykonaj punkty 13 i 14 w bazie danych <em>RBD2</em>.</p>
+</li>
+<li><p>Należy wycofać zmiany rozproszonej transakcji. Dlaczego? <mark>[Raport]</mark></p>
+</li>
+<li><p>W bazie danych <em>rbd1</em> wycofaj lokalną część rozproszonej transakcji. <strong>Uwaga</strong>: użyj odpowiedniego identyfikatora lokalnej transakcji.</p>
+<pre><code class="fenced-code-block language-sql"><span class="token keyword">rollback</span> <span class="token keyword">force</span> <span class="token string">'6.29.817'</span></code></pre>
+</li>
+<li><p>Wykonaj punkty 13 i 14 jeszcze raz w bazie danych <em>RBD2</em>.</p>
+</li>
+<li><p>W bazie danych <em>RBD1</em> spróbuj zmodyfikować informację pracowniku 100. Co się stało? Dlaczego? <mark>[Raport]</mark></p>
+</li>
+<li><p>Czy istnieje potrzeba wykonania kroku 17 w bazie danych RBD2? Dlaczego? <mark>[Raport]</mark></p>
+</li>
+<li><p>Zrealizuj powyższy scenariusz dla awarii <em>Crash commit point site after commit</em>. <mark>[Raport]</mark></p>
+</li>
+<li><p>W obu bazach danych włącz automatyczne odtwarzanie rozproszonych transakcji.</p>
+</li>
+</ol>
+</article>
+<style type="text/css">
+    /* Ograniczamy działanie liczników tylko do artykułu z klasą .tutorial */
+    article.tutorial {
+        counter-reset: h2counter;
+        /* reset głównego licznika */
+    }
+
+    /* --- Numerowanie h2 --- */
+    article.tutorial h2 {
+        counter-increment: h2counter;
+        /* zwiększamy licznik h2 */
+        counter-reset: h3counter;
+        /* resetujemy podrzędne liczniki */
+    }
+
+    article.tutorial h2::before {
+        content: counter(h2counter) ". ";
+        font-weight: normal;
+        color: #555;
+    }
+
+    /* --- Numerowanie h3 --- */
+    article.tutorial h3 {
+        counter-increment: h3counter;
+        counter-reset: h4counter;
+    }
+
+    article.tutorial h3::before {
+        content: counter(h2counter) "." counter(h3counter) " ";
+        font-weight: normal;
+        color: #777;
+    }
+
+    /* --- Numerowanie h4 (opcjonalnie) --- */
+    article.tutorial h4 {
+        counter-increment: h4counter;
+    }
+
+    article.tutorial h4::before {
+        content: counter(h2counter) "." counter(h3counter) "." counter(h4counter) " ";
+        font-weight: normal;
+        color: #999;
+    }
+
+    article.tutorial {
+        font: 400 16px/1.5 "Helvetica Neue", Helvetica, Arial, sans-serif;
+        color: #111;
+        background-color: #fbfbfb;
+        -webkit-text-size-adjust: 100%;
+        -webkit-font-feature-settings: "kern" 1;
+        -moz-font-feature-settings: "kern" 1;
+        -o-font-feature-settings: "kern" 1;
+        font-feature-settings: "kern" 1;
+        font-kerning: normal;
+        padding: 30px;
+    }
+
+    @media only screen and (max-width: 600px) {
+        article.tutorial {
+            padding: 5px;
+        }
+
+        article.tutorial>#content {
+            padding: 0px 20px 20px 20px !important;
+        }
+    }
+
+    article.tutorial>#content {
+        margin: 0px;
+        max-width: 900px;
+        border: 1px solid #e1e4e8;
+        padding: 10px 40px;
+        padding-bottom: 20px;
+        border-radius: 2px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    article.tutorial summary {
+        cursor: pointer;
+        text-decoration: underline;
+    }
+
+    article.tutorial hr {
+        color: #bbb;
+        background-color: #bbb;
+        height: 1px;
+        flex: 0 1 auto;
+        margin: 1em 0;
+        padding: 0;
+        border: none;
+    }
+
+    article.tutorial .hljs-operator {
+        color: #868686;
+        /* There is a bug where the syntax highlighter would pick no color for e.g. `&&` symbols in the code samples. Let's overwrite this */
+    }
+
+    /* Links */
+    article.tutorial a {
+        color: #0366d6;
+        text-decoration: none;
+    }
+
+    article.tutorial a:visited {
+        color: #0366d6;
+    }
+
+    article.tutorial a:hover {
+        color: #0366d6;
+        text-decoration: underline;
+    }
+
+    article.tutorial pre {
+        background-color: #f6f8fa;
+        border-radius: 3px;
+        font-size: 85%;
+        line-height: 1.45;
+        overflow: auto;
+        padding: 16px;
+    }
+
+    article.tutorial code {
+        background-color: rgba(27, 31, 35, .05);
+        border-radius: 3px;
+        font-size: 85%;
+        margin: 0;
+        word-wrap: break-word;
+        padding: .2em .4em;
+        font-family: SFMono-Regular, Consolas, Liberation Mono, Menlo, Courier, monospace;
+    }
+
+    article.tutorial pre>code {
+        background-color: transparent;
+        border: 0;
+        display: inline;
+        line-height: inherit;
+        margin: 0;
+        overflow: visible;
+        padding: 0;
+        word-wrap: normal;
+        font-size: 100%;
+    }
+
+    /* Blockquotes */
+    article.tutorial blockquote {
+        margin-left: 30px;
+        margin-top: 0px;
+        margin-bottom: 16px;
+        border-left-width: 3px;
+        padding: 0 1em;
+        color: #828282;
+        border-left: 4px solid #e8e8e8;
+        padding-left: 15px;
+        font-size: 18px;
+        letter-spacing: -1px;
+        font-style: italic;
+    }
+
+    article.tutorial blockquote * {
+        font-style: normal !important;
+        letter-spacing: 0;
+        color: #6a737d !important;
+    }
+
+    /* Tables */
+    article.tutorial table {
+        border-spacing: 2px;
+        display: block;
+        font-size: 14px;
+        overflow: auto;
+        width: 100%;
+        margin-bottom: 16px;
+        border-spacing: 0;
+        border-collapse: collapse;
+    }
+
+    article.tutorial td {
+        padding: 6px 13px;
+        border: 1px solid #dfe2e5;
+    }
+
+    article.tutorial th {
+        font-weight: 600;
+        padding: 6px 13px;
+        border: 1px solid #dfe2e5;
+    }
+
+    article.tutorial tr {
+        background-color: #fff;
+        border-top: 1px solid #c6cbd1;
+    }
+
+    article.tutorial table tr:nth-child(2n) {
+        background-color: #f6f8fa;
+    }
+
+    /* Others */
+    article.tutorial img {
+        max-width: 100%;
+    }
+
+    article.tutorial p {
+        line-height: 24px;
+        font-weight: 400;
+        font-size: 16px;
+        color: #24292e;
+    }
+
+    article.tutorial ul {
+        margin-top: 0;
+    }
+
+    article.tutorial li {
+        color: #24292e;
+        font-size: 16px;
+        font-weight: 400;
+        line-height: 1.5;
+    }
+
+    article.tutorial li+li {
+        margin-top: 0.25em;
+    }
+
+    article.tutorial * {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+        color: #24292e;
+    }
+
+    article.tutorial a:visited {
+        color: #0366d6;
+    }
+
+    article.tutorial h1,
+    article.tutorial h2,
+    article.tutorial h3 {
+        border-bottom: 1px solid #eaecef;
+        color: #111;
+        /* Darker */
+    }
+
+    article.tutorial code>* {
+        font-family: Consolas, "Liberation Mono", Menlo, Courier, monospace !important;
+    }
+</style>

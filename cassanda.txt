@@ -1,0 +1,74 @@
+k3d cluster delete RBDcluster
+k3d cluster create RBDcluster --servers 1 --agents 4  \
+    -p "5432-5435:5432-5435@loadbalancer"
+
+
+
+kubectl get events --sort-by='.lastTimestamp' -w
+
+
+helm repo add k8ssandra https://helm.k8ssandra.io/stable
+helm repo update
+
+helm install cass-operator k8ssandra/cass-operator -n cass-operator --create-namespace --set admissionWebhooks.enabled=false --set global.clusterScoped=true --version 0.62.0
+kubectl -n cass-operator get pods -w
+
+#kubectl -n  cass-operator apply -f operator/k8s-flavors/minikube/storage.yaml
+#kubectl -n  cass-operator apply -f config/samples/1node.yaml
+#kubectl -n  cass-operator apply -f c1node.yaml
+
+kubectl label node k3d-rbdcluster-agent-0 topology.kubernetes.io/zone=zone-a --overwrite
+kubectl label node k3d-rbdcluster-agent-1 topology.kubernetes.io/zone=zone-b --overwrite
+kubectl label node k3d-rbdcluster-agent-2 topology.kubernetes.io/zone=zone-c --overwrite
+
+kubectl apply -f c2nodes.yaml
+
+
+kubectl -n cass-operator logs -f cass-operator-6d9644769c-jk2nc
+kubectl get pods -w
+
+kubectl  describe pod rbd-dc1-rack1-sts-0
+
+kubectl  logs rbd-dc1-rack1-sts-0 -c cassandra
+kubectl  logs rbd-dc1-rack1-sts-0 -c server-system-logger
+kubectl  exec -it rbd-dc1-rack1-sts-0 -c cassandra -- tail -n 50 /var/log/cassandra/system.log
+
+kubectl  exec -it -c cassandra rbd-dc1-rack1-sts-0 -- nodetool status
+
+kubectl  exec -it -c cassandra rbd-dc1-rack2-sts-0 -- nodetool status
+
+
+
+kubectl  exec -ti rbd-dc1-rack1-sts-0 -c cassandra -- sh -c cqlsh
+kubectl  exec -ti rbd-dc1-rack2-sts-0 -c cassandra -- sh -c cqlsh
+
+ select * from system.peers;
+
+https://cassandra.apache.org/doc/4.1/index.html
+https://cassandra.apache.org/doc/4.1/cassandra/managing/tools/cqlsh.html#consistency
+https://cassandra.apache.org/doc/4.1/cassandra/tools/cqlsh.html#consistency
+
+https://cassandra.apache.org/doc/4.1/cassandra/architecture/dynamo.html#tunable-consistency
+
+docker stop k3d-RBDcluster-agent-1
+
+kubectl cordon k3d-rbdcluster-agent-1
+kubectl drain k3d-rbdcluster-agent-1 --ignore-daemonsets --delete-emptydir-data --force
+
+kubectl delete pod rbd-dc1-rack2-sts-0 --force --grace-period=0
+
+kubectl  exec -ti rbd-cassandra-0 -- sh -c cqlsh
+
+
+kubectl exec -it rbd-cassandra-0 -- nodetool getendpoints test  dist_tab 00000001
+
+kubectl exec -it rbd-cassandra-0 -- nodetool ring
+
+kubectl  exec -it rbd-cassandra-0 -- nodetool status
+
+kubectl delete -f rbd-cassandra.yaml
+kubectl delete pvc rbd-cassandra-data-rbd-cassandra-0 rbd-cassandra-data-rbd-cassandra-1
+kubectl apply  -f rbd-cassandra.yaml
+kubectl get pods -w
+
+kubectl  exec -it rbd-cassandra-0 -- tail -n 50 /var/log/cassandra/system.log

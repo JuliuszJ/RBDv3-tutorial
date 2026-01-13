@@ -1,0 +1,711 @@
+<article class="tutorial">
+    <h1 id="asynchroniczna-replikacja-dwukierunkowa-szbd-postgres">Asynchroniczna
+        replikacja dwukierunkowa SZBD Postgres</h1>
+    <p>Replikacja z wykorzystaniem materializowanych perspektyw oraz
+        replikacja strumieniowa jest replikacją typu <em>single-master</em>. W
+        takiej replikacji zmiany wprowadzane tylko do bazy danych
+        <em>master</em> są replikowane do pozostałych baz danych. Pozostałe bazy
+        danych pracują w trybie tylko do odczytu lub wprowadzane do nich zmiany
+        nie są propagowane do bazy danych <em>master</em>. Niniejszy tutorial
+        poświęcony jest replikacji <em>multi-master</em> w środowisku systemu
+        Postgresql. Replikacja <em>multi-master</em> umożliwia propagowanie
+        zmian wprowadzanych we wszystkich replikach danych.
+    </p>
+    <p>Celem zajęć jest zapoznanie się z dwukierunkowa replikacją
+        udostępnianą przez odgałęzienie (ang. fork) projektu <em>Postgresql</em>
+        o nazwie <a href="https://www.2ndquadrant.com/en/resources/bdr/">Bi-Directional
+            Replication for PostgreSQL</a> (Postgres-BDR lub BDR). Odgałęzienie to
+        jest rozwijane w formie otwartego kodu przez firmę <a href="https://2ndquadrant.com/">2ndQuadrant</a>. Najnowsza
+        stabilna
+        wersja bazuje na <em>Posgresql</em> w wersji 9.4. Rozwiązanie to
+        analogicznie do replikacji strumieniowej korzysta z informacji
+        zapisywanych w dzienniku bazy danych.</p>
+    <h2 id="przygotowanie-środowiska">Przygotowanie środowiska</h2>
+    <ol>
+        <li>
+            <p>Zaloguj się do maszyny wirtualnej jako użytkownik postgres
+                używając hasła RBD#7102.</p>
+        </li>
+        <li>
+            <p>Otwórz okno terminala, który nazwiemy terminalem
+                pomocniczym.</p>
+        </li>
+        <li>
+            <p>W pierwszym kroku pobierz plik manifestów za pomocą poniższego
+                polecenia:</p>
+            <p>
+            <pre><code>wget www.cs.put.poznan.pl/jjezierski/RBDv2/bdr.yaml</code></pre>
+            </p>
+        </li>
+        <li>
+            <p>Otwórz plik manifestów w celu jego przeglądnięcia za pomocą
+                polecenia:</p>
+            <p>
+            <pre><code>less bdr.yaml</code></pre>
+            </p>
+            <p>Zwróć uwagę, że manifesty są bardzo podobne do tych, które zostały
+                wykorzystane do przygotowania węzłów roboczych klastra Citus.</p>
+        </li>
+        <li>
+            <p>Rozpocznij wdrożenie komponentów z pliku manifestów za pomocą
+                polecenia:</p>
+            <pre><code>kubectl apply -f bdr.yaml</code></pre>
+        </li>
+        <li>
+            <p>Obserwuj postęp wdrożenia <em>StatefulSet</em> wykorzystując
+                poniższe polecenie:</p>
+            <pre><code>kubectl get sts --watch</code></pre>
+        </li>
+        <li>
+            <p>Skopiuj katalog <em>loggers</em> do katalogu <em>/data</em>
+                replik pgsql-bdr-bdr-0 i pgsql-bdr-bdr-1. Użyj poniższych
+                poleceń:</p>
+            <pre><code>kubectl cp loggers pgsql-bdr-sts-0:/data
+kubectl cp loggers pgsql-bdr-sts-1:/data
+</code></pre>
+        </li>
+        <li>
+            <p>Otwórz dwie kolejne zakładki w oknie terminala. Nazwij te zakładki nazwami
+                kolejnych replik od pgsql-rbd-sts-0 do pgsql-rbd-sts-1. W
+                terminalach pgsql-bdr-sts-0 i pgsql-bdr-sts-1 będziemy wykonywać
+                operacje na bazach danych uruchomionych w replikach pgsql-bdr-bdr-0 1 i
+                pgsql-bdr-bdr-1, które dalej będziemy odpowiednio nazywać bdr0 i
+                bdr1.
+            </p>
+        </li>
+        <li>
+            <p>W terminalu pgsql-bdr-sts-0 wykonaj poniższe polecenie aby
+                uruchomić powłokę w replice pgsql-bdr-sts-0. Replika ta będzie
+                obsługiwać bazę danych, którą będziemy dalej nazywać bdr0.</p>
+            <pre><code>kubectl exec -it pgsql-bdr-sts-0 -- /bin/bash</code></pre>
+        </li>
+
+        <li>
+            <p>W tym samym terminalu uruchom narzędzie <em>psql</em> w celu
+                przyłączenia się do bazy danych bdr0, wykorzystaj następujące
+                polecenie:</p>
+            <p>
+            <pre><code>psql -U postgres</code></pre>
+            </p>
+        </li>
+
+
+        <li>
+            <p>Analogicznie jak punkcie 10, w zakładce pgsql-bdr-sts-1 uruchom
+                powłokę repliki pgsql-bdr-sts-1.</p>
+        </li>
+        <li>
+            <p>Tak samo jak punkcie 10, w zakładkach pgsql-bdr-sts-1 uruchom
+                narzędzie psql.</p>
+        </li>
+        <li>
+            <p>W bazie danych <em>bdr0</em> utwórz rozszerzenie
+                <em>bdr</em>:
+            </p>
+
+            <pre><code>CREATE EXTENSION btree_gist;
+CREATE EXTENSION bdr;
+</code></pre>
+        </li>
+
+        <li>
+            <p>Powtórz poprzedni krok w bazie <em>bdr1</em>.</p>
+        </li>
+
+    </ol>
+    <h2 id="replikacja-dwukierunkowa">Replikacja dwukierunkowa</h2>
+    <ol>
+        <li>
+            <p>W bazie danych <em>bdr0</em> utwórz grupę replikacji:</p>
+
+            <pre>
+<code>SELECT bdr.bdr_group_create(
+local_node_name := 'bdr0_node',
+node_external_dsn := 
+  'port=5432 dbname=postgres host=pgsql-bdr-sts-0.pgsql-rbd-bdr user=postgres password=rbd-bdr'
+);</code></pre>
+        </li>
+
+        <li>
+            <p>W bazie danych <em>bdr0</em> włącz oczekiwanie na dołączenie
+                drugiej bazy danych<em>:</em></p>
+
+            <pre><code>SELECT bdr.bdr_node_join_wait_for_ready();</code></pre>
+        </li>
+
+        <li>
+            <p>W bazie danych <em>bdr1</em> dołącz do grupy replikacji.</p>
+
+            <pre><code>SELECT bdr.bdr_group_join(
+    local_node_name := 'bdr1_node',
+    node_external_dsn :=
+      'port=5432 dbname=postgres host=pgsql-bdr-sts-1.pgsql-rbd-bdr user=postgres password=rbd-bdr',
+    join_using_dsn :=
+      'port=5432 dbname=postgres host=pgsql-bdr-sts-0.pgsql-rbd-bdr user=postgres password=rbd-bdr '
+);
+</code></pre>
+        </li>
+
+        <li>
+            <p>W bazie danych <em>bdr1</em> włącz oczekiwanie na drugiej bazy
+                danych<em>:</em></p>
+            <pre><code>SELECT bdr.bdr_node_join_wait_for_ready();</code></pre>
+        </li>
+
+
+        <li>
+            <p>W bazie danych <em>bdr0</em> sprawdź status baz danych
+                znajdujących się w grupie replikacji:</p>
+
+<pre><code>select 
+    node_name,
+    case node_status 
+        when 'r' then 'ready' 
+        when 'k' then 'killed/removed'
+        when 'i' then 'init' end as status, 
+    node_read_only 
+from bdr.bdr_nodes;
+</code></pre>
+
+        </li>
+        <li>
+            <p>W bazie danych <em>bdr0</em> uruchom skrypt
+                /data/loggers/loggers.sql:</p>
+                <pre><code>\i /data/loggers/loggers.sql</code></pre>
+        </li>
+
+
+        <li>
+            <p>W bazie danych <em>bdr1</em> sprawdź dostępne tabele:
+                 <mark>[Raport]</mark></p>
+                <pre><code>\dt</code></pre>
+        </li>
+
+
+        <li>
+            <p>W bazie danych <em>bdr1</em> załaduj dane do utworzonych
+                tabel:</p>
+                
+<pre><code>\i /data/loggers/organizations.dmp
+\i /data/loggers/loggers.dmp
+\i /data/loggers/measurements.dmp
+</code></pre>
+                
+            </li>
+        <li>
+            <p>W bazie danych <em>bdr0</em> sprawdź zawartość tabeli
+                <em>organizations</em>.
+            </p>
+        </li>
+        <li>
+            <p>W bazie danych <em>bdr0</em> zmień nazwę organizacji o
+                identyfikatorze 50 na <em>Replikowana org1</em>.</p>
+        </li>
+        <li>
+            <p>W bazie danych <em>bdr1</em> sprawdź nazwę organizacji o
+                identyfikatorze 50.  <mark>[Raport]</mark></p>
+        </li>
+        <li>
+            <p>W bazie danych <em>bdr1</em> zmień nazwę organizacji o
+                identyfikatorze 50 na <em>Replikowana org2</em>.</p>
+        </li>
+        <li>
+            <p>W bazie danych <em>bdr1</em> sprawdź nazwę organizacji o
+                identyfikatorze 50.  <mark>[Raport]</mark></p>
+        </li>
+    </ol>
+    <h2 id="konflikt-typu-insert-vs-insert">Konflikt typu <em>insert</em> vs
+        <em>insert</em>
+    </h2>
+    <p>Replikacja asynchroniczna może prowadzić do konfliktów jeżeli dane są
+        współbieżnie modyfikowane w różnych bazach danych. Poniższe ćwiczenia
+        mają na celu zilustrowanie takich konfliktów.</p>
+    <ol>
+        <li>
+            <p>W bazie danych <em>bdr0</em> wstrzymaj aplikowanie zmian z
+                replik:</p>
+                <pre><code>select bdr.bdr_apply_pause();</code></pre>
+        </li>
+
+
+        <li>
+            <p>W bazie danych <em>bdr1</em> wstrzymaj aplikowanie zmian z
+                replik:</p>
+                <pre><code>select bdr.bdr_apply_pause();</code></pre>
+        </li>
+
+
+        <li>
+            <p>W bazie danych <em>bdr0</em> utwórz organizację <em>Replikowana
+                    org3</em> o identyfikatorze -10.</p>
+        </li>
+        <li>
+            <p>W bazie danych <em>bdr1</em> utwórz organizację <em>Replikowana
+                    org4</em> o identyfikatorze -10.</p>
+        </li>
+        <li>
+            <p>W bazie danych <em>bdr0</em> wznów aplikowanie zmian z
+                replik:</p>
+                <pre><code>select bdr.bdr_apply_resume();</code></pre>
+        </li>
+
+
+        <li>
+            <p>W bazie danych <em>bdr1</em> wznów aplikowanie zmian z
+                replik:</p>
+                <pre><code>select bdr.bdr_apply_resume();</code></pre>
+        </li>
+
+
+        <li>
+            <p>W bazie danych <em>bdr0</em> sprawdź nazwę organizacji o
+                identyfikatorze -10.  <mark>[Raport]</mark></p>
+        </li>
+        <li>
+            <p>W bazie danych <em>bdr1</em> sprawdź nazwę organizacji o
+                identyfikatorze -10.  <mark>[Raport]</mark></p>
+        </li>
+    </ol>
+    <h2 id="konflikt-typu-update-vs-update">Konflikt typu <em>update</em> vs
+        <em>update</em>
+    </h2>
+    <ol>
+        <li>
+            <p>W bazie danych <em>bdr0</em> wstrzymaj aplikowanie zmian z
+                replik:</p>
+                <pre><code>select bdr.bdr_apply_pause();</code></pre>
+        </li>
+
+
+        <li>
+            <p>W bazie danych <em>bdr1</em> wstrzymaj aplikowanie zmian z
+                replik:</p>
+                <pre><code>select bdr.bdr_apply_pause();</code></pre>
+        </li>
+
+        <li>
+            <p>W bazie danych <em>bdr0</em> rozpocznij poniższą
+                transakcję:</p>
+
+<pre><code>begin;
+select me_temperature from measurements where me_id=203308395 for update;
+update measurements set me_temperature=me_temperature+1 where me_id=203308395;
+</code></pre>
+        </li>
+
+        <li>
+            <p>W bazie danych <em>bdr1</em> rozpocznij poniższą
+                transakcję:</p>
+<pre><code>begin;
+select me_temperature from measurements where me_id=203308395 for update;
+update measurements set me_temperature=me_temperature+2 where me_id=203308395;
+</code></pre>                
+        </li>
+        <li>
+            <p>W bazie danych <em>bdr0</em> zatwierdź transakcję.</p>
+        </li>
+        <li>
+            <p>W bazie danych <em>bdr1</em> zatwierdź transakcję.</p>
+        </li>
+        <li>
+            <p>W bazie danych <em>bdr0</em> wznów aplikowanie zmian z
+                replik:</p>
+                <pre><code>select bdr.bdr_apply_resume();</code></pre>
+        </li>
+
+
+        <li>
+            <p>W bazie danych <em>bdr1</em> wznów aplikowanie zmian z
+                replik:</p>
+                <pre><code>select bdr.bdr_apply_resume();</code></pre>
+        </li>
+
+        <li>
+            <p>W bazie danych <em>bdr0</em> odczytaj zmodyfikowany pomiar:
+                 <mark>[Raport]</mark></p>
+                <pre><code>select me_temperature from measurements where me_id=203308395;</code></pre>
+        </li>
+
+
+        <li>
+            <p>W bazie danych <em>bdr1</em> odczytaj zmodyfikowany pomiar:
+                 <mark>[Raport]</mark></p>
+                <pre><code>select me_temperature from measurements where me_id=203308395;</code></pre>
+        </li>
+
+
+    </ol>
+    <h2 id="obsługa-konfliktu">Obsługa konfliktu</h2>
+    <ol>
+        <li>
+            <p>Otwórz terminal pomocniczy.</p>
+        </li>
+        <li>
+            <p>W terminalu pomocniczym pobierz źródło procedury
+                <em>measurements_conflict_handler_upd_upd</em> i zapoznaj się z
+                nim:
+            </p>
+
+<pre><code>curl \
+    https://www.cs.put.poznan.pl/jjezierski/RBDv2/measurements_conflict_handler_upd_upd.sql \
+    -o ~/measurements_conflict_handler_upd_upd.sql
+kubectl cp ~/measurements_conflict_handler_upd_upd.sql pgsql-bdr-sts-0:/data
+</code></pre>
+        </li>
+
+        <li>
+            <p>W bazie danych <em>bdr0</em> utwórz procedurę
+                <em>measurements_conflict_handler_upd_upd</em>:
+            </p>
+            <pre><code>\i /data/measurements_conflict_handler_upd_upd.sql</code></pre>
+        </li>
+
+
+        <p>W bazie danych <em>bdr0</em> wykorzystaj procedurę
+                <em>measurements_conflict_handler_upd_upd</em> do obsługi konfliktu
+                <em>update vs update</em> na tabeli <em>measurements</em>:
+            </p>
+
+<pre>
+<code>
+select * from bdr.bdr_create_conflict_handler(
+    ch_rel := 'measurements',
+    ch_name := 'measurements_upd_upd_handler',
+    ch_proc :=
+    'public.measurements_conflict_handler_upd_upd(public.measurements, public.measurements, text, regclass, bdr.bdr_conflict_type)', ch_type := 'update_update');
+</code>
+</pre>
+
+        <li>
+            <p>Wykorzystując perspektywę bdr.bdr_list_conflict_handlers sprawdź czy w bazie danych <em>bdr1</em> należy
+                powtórzyć kroki 3
+                i 4.  <mark>[Raport]</mark></p>
+        </li>
+        <li>
+            <p>Powtórz kroki z ćwiczenia 4 "Konflikt typu update vs
+                update".</p>
+        </li>
+        <li>
+            <p>Na czym polega rozwiązanie tego konfliktu?  <mark>[Raport]</mark></p>
+        </li>
+
+    </ol>
+
+    <h2 id="niedostępność-bazy-danych-z-grupy-replikacji">Niedostępność
+        bazy danych z grupy replikacji</h2>
+    <ol>
+        <li>
+            <p>W celu wyłączenia bazy danych <em>bdr1</em> zmniejsz liczbę
+                replik do jeden, w tym celu w terminalu pomocniczym wykonaj poniższe
+                polecenie:</p>
+                <pre><code>kubectl scale sts pgsql-bdr-sts --replicas 1</code></pre>
+        </li>
+
+
+
+        <li>
+            <p>W bazie danych <em>bdr0</em> zmień nazwę organizacji z
+                identyfikatorem -10 na wartość ChangedOnBdr1. Czy operacja się powiodła?
+                 <mark>[Raport]</mark></p>
+        </li>
+        <li>
+            <p>Dodaj nową kolumnę do tabeli <em>organizations</em>, w tym celu w
+                bazie danych <em>bdr0</em> wykonaj następujące polecenie:</p>
+                <pre><code>alter table organizations add column location varchar(50);</code></pre>
+        </li>
+
+        <p>Co się stało?  <mark>[Raport]</mark></p>
+
+        <li>
+            <p>W celu włączenia bazy danych <em>bdr1</em> zwiększ liczbę replik
+                do dwóch, w tym celu w terminalu pomocniczym wykonaj poniższe
+                polecenie:</p>
+                <pre><code>kubectl scale sts pgsql-bdr-sts --replicas 2</code></pre>
+        </li>
+
+
+        <li>
+            <p>W zakładce pgsql-bdr-sts-1 uruchom ponownie powłokę repliki
+                pgsql-bdr-sts-1. Przyłącz się w niej ponownie do bazy danych
+                <em>bdr1</em>.
+            </p>
+        </li>
+        <li>
+            <p>Sprawdź czy zmiana nazwy organizacji z identyfikatorem -10
+                zreplikowała się do bazy danych <em>bdr1.</em>  <mark>[Raport]</mark></p>
+        </li>
+        <li>
+            <p>W zakładce pgsql-bdr-sts-1 sprawdź jaki jest status wykonania
+                polecenia ALTER TABLE.  <mark>[Raport]</mark></p>
+        </li>
+        <li>
+            <p>W bazie danych <em>bdr1</em> sprawdź schemat tabeli
+                <em>organizations</em>.  <mark>[Raport]</mark>
+            </p>
+        </li>
+    </ol>
+    <h2 id="replikacja-operacji-ddl">Replikacja operacji DDL</h2>
+    <p>Replikacja operacji DDL na obiektach znajdujących się w grupie
+        replikacji jest wykonywana automatycznie. Wyjątkiem są operacje, które
+        dotyczą całej instancji bazy danych, przykładowo utworzenie użytkownika.
+        W takim przypadku należy użyć funkcji
+        <em>bdr.bdr_replicate_ddl_command</em>.
+    </p>
+    <ol>
+        <li>
+            <p>W bazie danych <em>bdr0</em> utwórz użytkownika RBD.</p>
+            <pre><code>SELECT bdr.bdr_replicate_ddl_command('CREATE USER RBD;');</code></pre>
+        </li>
+    
+
+        <li>
+            <p>W bazie danych bdr1 sprawdź istnienie użytkownika RBD.</p>
+            <pre><code>\du RBD</code></pre>
+        </li>
+
+    </ol>
+    <style type="text/css">
+        /* Ograniczamy działanie liczników tylko do artykułu z klasą .tutorial */
+        article.tutorial {
+            counter-reset: h2counter;
+            /* reset głównego licznika */
+        }
+
+        /* --- Numerowanie h2 --- */
+        article.tutorial h2 {
+            counter-increment: h2counter;
+            /* zwiększamy licznik h2 */
+            counter-reset: h3counter;
+            /* resetujemy podrzędne liczniki */
+        }
+
+        article.tutorial h2::before {
+            content: counter(h2counter) ". ";
+            font-weight: normal;
+            color: #555;
+        }
+
+        /* --- Numerowanie h3 --- */
+        article.tutorial h3 {
+            counter-increment: h3counter;
+            counter-reset: h4counter;
+        }
+
+        article.tutorial h3::before {
+            content: counter(h2counter) "." counter(h3counter) " ";
+            font-weight: normal;
+            color: #777;
+        }
+
+        /* --- Numerowanie h4 (opcjonalnie) --- */
+        article.tutorial h4 {
+            counter-increment: h4counter;
+        }
+
+        article.tutorial h4::before {
+            content: counter(h2counter) "." counter(h3counter) "." counter(h4counter) " ";
+            font-weight: normal;
+            color: #999;
+        }
+
+        article.tutorial {
+            font: 400 16px/1.5 "Helvetica Neue", Helvetica, Arial, sans-serif;
+            color: #111;
+            background-color: #fbfbfb;
+            -webkit-text-size-adjust: 100%;
+            -webkit-font-feature-settings: "kern" 1;
+            -moz-font-feature-settings: "kern" 1;
+            -o-font-feature-settings: "kern" 1;
+            font-feature-settings: "kern" 1;
+            font-kerning: normal;
+            padding: 30px;
+        }
+
+        @media only screen and (max-width: 600px) {
+            article.tutorial {
+                padding: 5px;
+            }
+
+            article.tutorial>#content {
+                padding: 0px 20px 20px 20px !important;
+            }
+        }
+
+        article.tutorial>#content {
+            margin: 0px;
+            max-width: 900px;
+            border: 1px solid #e1e4e8;
+            padding: 10px 40px;
+            padding-bottom: 20px;
+            border-radius: 2px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        article.tutorial summary {
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        article.tutorial hr {
+            color: #bbb;
+            background-color: #bbb;
+            height: 1px;
+            flex: 0 1 auto;
+            margin: 1em 0;
+            padding: 0;
+            border: none;
+        }
+
+        article.tutorial .hljs-operator {
+            color: #868686;
+            /* There is a bug where the syntax highlighter would pick no color for e.g. `&&` symbols in the code samples. Let's overwrite this */
+        }
+
+        /* Links */
+        article.tutorial a {
+            color: #0366d6;
+            text-decoration: none;
+        }
+
+        article.tutorial a:visited {
+            color: #0366d6;
+        }
+
+        article.tutorial a:hover {
+            color: #0366d6;
+            text-decoration: underline;
+        }
+
+        article.tutorial pre {
+            background-color: #f6f8fa;
+            border-radius: 3px;
+            font-size: 85%;
+            line-height: 1.45;
+            overflow: auto;
+            padding: 16px;
+        }
+
+        article.tutorial code {
+            background-color: rgba(27, 31, 35, .05);
+            border-radius: 3px;
+            font-size: 85%;
+            margin: 0;
+            word-wrap: break-word;
+            padding: .2em .4em;
+            font-family: SFMono-Regular, Consolas, Liberation Mono, Menlo, Courier, monospace;
+        }
+
+        article.tutorial pre>code {
+            background-color: transparent;
+            border: 0;
+            display: inline;
+            line-height: inherit;
+            margin: 0;
+            overflow: visible;
+            padding: 0;
+            word-wrap: normal;
+            font-size: 100%;
+        }
+
+        /* Blockquotes */
+        article.tutorial blockquote {
+            margin-left: 30px;
+            margin-top: 0px;
+            margin-bottom: 16px;
+            border-left-width: 3px;
+            padding: 0 1em;
+            color: #828282;
+            border-left: 4px solid #e8e8e8;
+            padding-left: 15px;
+            font-size: 18px;
+            letter-spacing: -1px;
+            font-style: italic;
+        }
+
+        article.tutorial blockquote * {
+            font-style: normal !important;
+            letter-spacing: 0;
+            color: #6a737d !important;
+        }
+
+        /* Tables */
+        article.tutorial table {
+            border-spacing: 2px;
+            display: block;
+            font-size: 14px;
+            overflow: auto;
+            width: 100%;
+            margin-bottom: 16px;
+            border-spacing: 0;
+            border-collapse: collapse;
+        }
+
+        article.tutorial td {
+            padding: 6px 13px;
+            border: 1px solid #dfe2e5;
+        }
+
+        article.tutorial th {
+            font-weight: 600;
+            padding: 6px 13px;
+            border: 1px solid #dfe2e5;
+        }
+
+        article.tutorial tr {
+            background-color: #fff;
+            border-top: 1px solid #c6cbd1;
+        }
+
+        article.tutorial table tr:nth-child(2n) {
+            background-color: #f6f8fa;
+        }
+
+        /* Others */
+        article.tutorial img {
+            max-width: 100%;
+        }
+
+        article.tutorial p {
+            line-height: 24px;
+            font-weight: 400;
+            font-size: 16px;
+            color: #24292e;
+        }
+
+        article.tutorial ul {
+            margin-top: 0;
+        }
+
+        article.tutorial li {
+            color: #24292e;
+            font-size: 16px;
+            font-weight: 400;
+            line-height: 1.5;
+        }
+
+        article.tutorial li+li {
+            margin-top: 0.25em;
+        }
+
+        article.tutorial * {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+            color: #24292e;
+        }
+
+        article.tutorial a:visited {
+            color: #0366d6;
+        }
+
+        article.tutorial h1,
+        article.tutorial h2,
+        article.tutorial h3 {
+            border-bottom: 1px solid #eaecef;
+            color: #111;
+            /* Darker */
+        }
+
+        article.tutorial code>* {
+            font-family: Consolas, "Liberation Mono", Menlo, Courier, monospace !important;
+        }
+    </style>

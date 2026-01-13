@@ -1402,7 +1402,7 @@ h2.nocount:before, h3.nocount:before, h4.nocount:before, h5.nocount:before, h6.n
 <li><p>ustal w drugim manifeście wartość klucza spec.ports.port na 1522.</p>
 </li>
 </ul>
-<ol start="5">
+<ol>
 <li><p>Wykonaj wdrożenie zawartości pliku ora2.yaml [Raport].</p>
 </li>
 <li><p>Pobierz skrypty SQL wykonując w terminalu pomocniczym polecenia:</p>
@@ -1410,7 +1410,7 @@ h2.nocount:before, h3.nocount:before, h4.nocount:before, h5.nocount:before, h6.n
 </ol>
 <p>wget <a href="http://www.cs.put.poznan.pl/jjezierski/RBDv2/pracownicy.sql">www.cs.put.poznan.pl/jjezierski/RBDv2/pracownicy.sql</a></p>
 <p>wget <a href="http://www.cs.put.poznan.pl/jjezierski/RBDv2/zespoly.sql">www.cs.put.poznan.pl/jjezierski/RBDv2/zespoly.sql</a></p>
-<ol start="6">
+<ol>
 <li><p>W terminalu pomocniczym skopiuj plik pracownicy.sql do katalogu /opt/oracle/oradata repliki ora-rbd1-0. Użyj poniższego polecenia:</p>
 <pre><code class="fenced-code-block">kubectl cp pracownicy.sql ora-rbd1-0:/opt/oracle/oradata</code></pre>
 </li>
@@ -1532,7 +1532,7 @@ dotyczącą <a href="https://docs.oracle.com/database/121/ADMIN/ds_txns.htm#ADMI
 <p>update zespoly set adres='PIOTROWO 2'where id_zesp=10;</p>
 <p>update pracownicy set placa_pod=888 where id_prac=100;</p>
 <p>commit comment 'ORA-2PC-CRASH-TEST-4'</p>
-<ol start="2">
+<ol>
 <li><p>W bazie danych <em>RBD2</em> stan tabel <em>pracownicy</em> i <em>zespoly</em>. Czy
 posiadają one zmiany wprowadzone przez transakcję z poprzedniego
 punkty? Dlaczego? [Raport]</p>
@@ -1543,7 +1543,7 @@ punkty? Dlaczego? [Raport]</p>
 <p>update zespoly set adres='PIOTROWO 3'where id_zesp=10;</p>
 <p>update pracownicy set placa_pod=777 where id_prac=100;</p>
 <p>commit comment 'ORA-2PC-CRASH-TEST-6'</p>
-<ol start="4">
+<ol>
 <li><p>W bazie danych <em>RBD2</em> stan tabel <em>pracownicy</em> i <em>zespoly</em>. Czy
 posiadają one zmiany wprowadzone przez transakcję z poprzedniego
 punktu? Dlaczego? [Raport]</p>
@@ -1563,16 +1563,16 @@ ręcznego odtworzenia transakcji.</p>
 <li>W bazie danych <em>RBD1</em> ustaw parametr COMMIT_POINT_STRENGTH:</li>
 </ol>
 <p>alter system set COMMIT_POINT_STRENGTH=10 scope=spfile;</p>
-<ol start="2">
+<ol>
 <li>W bazie danych <em>RBD2</em> ustaw parametr COMMIT_POINT_STRENGTH:</li>
 </ol>
 <p>alter system set COMMIT_POINT_STRENGTH=20 scope=spfile;</p>
-<ol start="3">
+<ol>
 <li>Zrestartuj bazę danych <em>RBD1</em> wykonując w terminalu pomocniczym
 następujące polecenie:</li>
 </ol>
 <p>kubectl rollout restart sts ora-rbd1</p>
-<ol start="4">
+<ol>
 <li><p>Nawiąż ponownie połączenie do bazy danych RBD1 z wykorzystaniem
 terminala ora-rdb1-0 i programu sqlplus. Użyj danych
 uwierzytelnienia użytkownika rbd. Nie zapomnij o ustawieniu
@@ -1591,7 +1591,7 @@ bazie danych XE, która jest kontenerem dla bazy danych RDB1:</p>
 <p>connect system/rbd1@XE</p>
 <p>ALTER SYSTEM DISABLE DISTRIBUTED RECOVERY;</p>
 <p>connect rbd/RBD#7102@rbd1</p>
-<ol start="8">
+<ol>
 <li><p>W bazie danych <em>RBD2</em> wyłącz automatyczne odtwarzanie transakcji.</p>
 </li>
 <li><p>W bazie danych <em>RBD1</em> wykonaj rozproszoną transakcję, zakończoną
@@ -1601,7 +1601,7 @@ symulacją błędu w trakcie wykonywania algorytmu 2PC:</p>
 <p>update zespoly set adres='PIOTROWO 4'where id_zesp=10;</p>
 <p>update pracownicy set placa_pod=666 where id_prac=100;</p>
 <p>commit comment 'ORA-2PC-CRASH-TEST-4'</p>
-<ol start="10">
+<ol>
 <li><p>W bazie danych <em>RBD2</em> sprawdź informację o zespole 10. [Raport]</p>
 </li>
 <li><p>W bazie danych <em>RBD1</em> spróbuj zmodyfikować informację o
@@ -1614,11 +1614,11 @@ zatwierdzona.) Co się stało? Dlaczego? [Raport]</p>
 </li>
 </ol>
 <p>select LOCAL_TRAN_ID, GLOBAL_TRAN_ID, STATE from DBA_2PC_PENDING;</p>
-<ol start="14">
+<ol>
 <li>W bazie danych <em>RBD1</em> wyświetl uczestników rozproszonej transakcji.</li>
 </ol>
 <p>select LOCAL_TRAN_ID, INTERFACE, DATABASE from DBA_2PC_NEIGHBORS;</p>
-<ol start="15">
+<ol>
 <li><p>Sprawdź w dokumentacji jakie dane są wyświetlane w kolumnie
 INTERFACE i co oznaczają w kontekście interesującej transakcji.
 [Raport]</p>
@@ -1633,7 +1633,7 @@ transakcji.</p>
 </li>
 </ol>
 <p>rollback force '6.29.817'</p>
-<ol start="19">
+<ol>
 <li><p>Wykonaj punkty 13 i 14 jeszcze raz w bazie danych <em>RBD2</em>.</p>
 </li>
 <li><p>W bazie danych <em>RBD1</em> spróbuj zmodyfikować informację

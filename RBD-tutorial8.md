@@ -1,6 +1,19 @@
 # VIII. Przetwarzanie rozproszone w Apache Cassandra
 
-Celem zajęć jest zapoznanie się przetwarzaniem rozproszonym w bazie danych [Apache Cassandra](https://pl.wikipedia.org/wiki/Apache_Cassandra)
+Celem zajęć jest zapoznanie się z przetwarzaniem rozproszonym w bazie danych Apache Cassandra.
+System ten zorientowany jest na szybkie wyszukiwanie i modyfikację wartości danych na podstawie ich klucza
+(klucz->wartość). Wartości danych mogą być typu prostego lub złożonego.
+Typy proste mogą reprezentować teksty, liczby, wartości logiczne, daty, czas, identyfikatory UUID
+i obiekty binarne. Typy złożone obejmują krotki, zbiory, listy oraz odwzorowania (ang maps).
+Klucz powinien być wartością prostą lub złożeniem takich wartości, analogicznie jak klucz
+podstawowy w modelu relacyjnym.
+
+Wszystkie wartości 
+Rozpraszanie poziome danych jest wykonywane na postawie funkcji haszującej,
+której argumentem jest klucz danych. Wynik  funkcji haszującej
+jest nazywany jest tokenem. Dziedzina wartości tokenów jest podzielona na przedziały. 
+Zbiór danych, których tokeny mieszczą się jednym stanowią partycję danych. Partycje są rozpraszane
+między węzła klastra. Li
 
 ## Przygotowanie środowiska
 
@@ -11,7 +24,7 @@ Celem zajęć jest zapoznanie się przetwarzaniem rozproszonym w bazie danych [A
 3. W pierwszym kroku pobierz plik manifestów za pomocą poniższego polecenia:
    
    ```
-   wget www.cs.put.poznan.pl/jjezierski/RBDv2/rbd-cassandra.yaml
+   wget www.cs.put.poznan.pl/jjezierski/RBDv3/rbd-cassandra.yaml
    ```
 
 4. Otwórz plik manifestów w celu jego przeglądnięcia za pomocą polecenia:

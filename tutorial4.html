@@ -61,17 +61,17 @@ kubectl delete pvc postgres-db-rbd-citus-worker2-2-0
 </code></pre>
         </li>
         <li>Skorzystamy ze StatefulSet, które zostały zdefiniowane w
-            pierwszym tutorialu, w tym celu wykonaj w terminalu pomocniczym
+            pierwszym tutorialu (NOWA WERSJA - Postgres 18), w tym celu wykonaj w terminalu pomocniczym
             następujące polecenia:
 
-            <pre><code>k3d image import rbd/postgres17:1.1 --cluster RBDcluster
-kubectl apply -f rbd1.yaml
-kubectl apply -f rbd2.yaml
+            <pre><code># nie potrzeba - k3d image import rbd/postgres17:1.1 --cluster RBDcluster
+wget www.cs.put.poznan.pl/jjezierski/RBDv3/rbd1_repl.yaml
+wget www.cs.put.poznan.pl/jjezierski/RBDv3/rbd2_repl.yaml
+kubectl apply -f rbd1_repl.yaml
+kubectl apply -f rbd2_repl.yaml
 </code></pre>
         </li>
         <li>Monitoruj postęp wdrażanie manifestów:
-
-
             <pre><code>kubectl get sts --watch</code></pre>
         </li>
         <li>Po zakończeniu wdrażania manifestów otwórz 2 nowe zakładki w
@@ -103,7 +103,7 @@ kubectl apply -f rbd2.yaml
             <pre><code>kubectl rollout restart sts pgsql-rbd1</code></pre>
         </li>
 
-        <li>W terminalu pomocniczym zrestartuj połączenie do bazy danych
+        <li>W terminalu dostawcy zrestartuj połączenie do bazy danych
             <em>provider-1</em>. Możesz w tym celu wykonać dwukrotnie to samo polecenie,
             np.:
 
@@ -261,11 +261,11 @@ join pg_class c on r.srrelid=c.oid;
         replikacja logiczna z wieloma dostawcami.</h2>
     <ol>
         <li>Utwórz nowy StatefulSet, który będzie zawierał bazę danych
-            <em>provider-2</em>. W tym celu skopiuj plik manifestów rbd2.yaml do pliku
-            rbd3.yaml. Za pomocą ulubionego edytora zamień w pliku rbd3.yaml
+            <em>provider-2</em>. W tym celu skopiuj plik manifestów rbd2_repl.yaml do pliku
+            rbd3_repl.yaml. Za pomocą ulubionego edytora zamień w pliku rbd3_repl.yaml
             wszystkie napisy rbd2 na rbd3, zamień również port wykorzystywany przez
             loadbalancer z 5433 na 5434. Wykonaj wdrożenie manifestów znajdujących
-            się w pliku rbd3.yaml.</li>
+            się w pliku rbd3_repl.yaml.</li>
         <li>W oknie terminalu otwórz nową zakładkę w oknie terminala, nazwij
             ją <em>provider-2</em>.</li>
         <li>W terminalu <em>provider-2</em> uruchom poniższe polecenie w celu
@@ -622,3 +622,4 @@ EOF
     article.tutorial code>* {
         font-family: Consolas, "Liberation Mono", Menlo, Courier, monospace !important;
     }
+</style>

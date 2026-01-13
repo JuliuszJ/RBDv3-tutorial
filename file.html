@@ -36,7 +36,7 @@
 <p>Klaster MongoDB wymaga co najmniej jednego węzła ruterów zapytań. Zastosowanie wielu takich węzłów umożliwia rozproszenie zapytań i wykorzystanie większej liczby zasobów do ich przetworzenia. Węzły te nie posiadają własnych danych i nie mogą być zorganizowane w zbiór replikacji. W związku z tym mogą ale nie muszą być wdrożone jako StatefulSet. Można by je wdrożyć jako Deployment, jednakże aby ujednolić manifesty wdrażanych obiektów Kubernetes, oraz co jest z tym związane ułatwić wdrożenie, zastosujemy StatefulSet również dla węzłów ruterów zapytań.</p>
 <p>Z powyższych założeń wynika, że należy utworzyć szereg bardzo podobnych do siebie manifestów Kubernetes. Jest to zadanie czasochłonne oraz obarczone dużym ryzykiem pomyłki. Rozwiązaniem byłoby zastosowanie mechanizmu szablonów manifestów, w którym w wygodny sposób można ustalać zmienne parametry manifestów. Takie własności posiada narzędzie Helm. Narzędzie to oprócz możliwości stosowania parametrów udostępnia konstrukcje warunkowe, pętle i inne zaawansowanych techniki tworzenia szablonów manifestów, włącznie z tworzeniem pakietów, które można publikować w repozytoriach. Helm pozwala również na wdrażanie manifestów w Kubernetes i zarządzanie wdrożonymi obiektami.</p>
 <p>Niniejszy rozdział poświecony jest zapoznaniu się z narzędziem Helm oraz wykorzystaniu go w celu konfiguracji kluastra MongoDB.</p>
-<ol type="1">
+<ol>
 <li><p>Zaloguj się do maszyny wirtualnej jako użytkownik <em>rbd</em> używając hasła <em>RBD#7102</em>.</p></li>
 <li><p>Otwórz okno terminala, który nazwiemy terminalem pomocniczym.</p></li>
 <li><p>W terminalu pomocniczym wykonaj poniższe polecenie w celu instalacji Helm:</p>
@@ -58,7 +58,7 @@ sudo mv linux-amd64/helm /usr/local/bin/</code></pre></li>
 <p>Szkielet nowej karty, który zawiera odpowiednie katalogi oraz przykładowe pliki można wygenerować za pomocą polecenia <code>helm create nazwa-nowej-karty</code>.</p>
 <p>Zapoznaj się z zawartością pliku <em>configmap.yaml</em>. Dla przypomnienia, mapa konfiguracyjna Kubernetes umożliwia składowanie i zarządzanie danymi konfiguracyjnymi, które są dostępne z poziomu kontenerów Pod w postaci wartości zmiennych środowiskowych lub zawartości plików. Pojedyncza mapa konfiguracyjna daje możliwość zapisania wielu zbiorów informacji wg schematu YAML <em>klucz: wartość</em>. W naszym scenariuszu wykorzystujemy mapę konfiguracyjną do zamontowania pliku konfiguracyjnego MongoDB w kontenerze Pod. Plik ten zawiera definicję klucza <em>mongod.conf</em>, jego wartością jest tekst zapisany w YAML ponieważ takiego formatu wymaga MongoDB dla swojego pliku konfiguracyjnego. W ogólności wartością klucza może być dowolny tekst, a nawet wartość binarna, jednakże w tym drugim przypadku wartość tę należy zapisać z wykorzystaniem kodowania Base64. Zauważ, że w pliku znajdują się wpisy typu wąsy (ang. mustash) , np. <em>{{ .Values.replSetName }}</em>. Zapis ten jest wykorzystywany do instruowania Helm o akcjach, które należy wykonać z wykorzystaniem szablonu. Konwencja ta pochodzi z języka Golang, z wykorzystaniem którego zaimplementowano Helm. Powyższy wpis jest parametrem o nazwie <em>replSetName</em> i służy do sparametryzowania nazwy zbioru replikacji MongoDB. Wartość tego parametru można podać podczas generowania manifestu lub w przypadku jej braku zostanie pobrana wartość domyślna z pliku <em>values.yaml</em>. Oprócz tego parametru wykorzystywane są jeszcze dwa parametry. Parametr <em>clusterRole</em> służy do zdefiniowania roli węzła w klastrze MongoDB, przybiera on dwie wartości: <em>configsvr</em> dla węzła konfiguracyjnego oraz <em>shardsvr</em> dla węzła fragmentu. Parametr <em>configDB</em> jest wykorzystywany przez węzły pełniące role ruterów zapytań i jego wartością są adresy węzłów konfiguracyjnych. W związku z tym, że struktura pliku konfiguracyjnego dla ruterów zapytań różni się od struktury plików dla węzłów konfiguracyjnych i węzłów fragmentów zastosowano konstrukcję warunkową <em>{{ if warunek }}</em>. Opcjonalny znak minus w konstrukcji warunkowej oznacza, że w przypadku niespełnienia warunku w manifeście nie ma być umieszczony pusty wiersz. W warunku wykorzystano wartość <em>mongos</em> parametru <em>clusterRole</em>. Wartość ta nie jest poprawną nazwą roli węzła i nie jest wykorzystywana w manifeście ze względu na zadziałanie instrukcji warunkowej, służy jedynie do zbudowania nieco odmiennej struktury pliku konfiguracyjnego dla ruterów zapytań. Nazwa tej wartości pochodzi od nazwy procesu, który dostarcza funkcjonalność rutera zapytań, która również brzmi <em>mongos</em>, w odróżnieniu od procesu <em>mongod</em>, który udostępnia funkcjonalność węzłów konfiguracyjnych i węzłów fragmentów. Zwróć uwagę, że nazwa mapy konfiguracyjnej również jest sparametryzowana parametrem <em>replSetName</em>.</p>
 <p>Zapoznaj się z zawartością pliku <em>manifest.yaml</em>. Szablon manifestów znajdujący się w tym pliku wykorzystuje dodatkowe parametry. Parametr <em>port</em> umożliwia wskazanie numeru portu, który ma zostać udostępniowny przez Servis i Pod w zależności typu węzła klastra MongoDB. I odpowiednio, węzły konfiguracyjne domyślnie nasłuchują na porcie 27019, węzły fragmentów domyślnie nasłuchują na porcie 27018, natomiast rutery zapytań domyślnie nasłuchują na porcie 27018. Parametr <em>replicas</em> daje możliwość określenia liczby węzłów w jednym zbiorze replikacji MongoDB. Zwróć uwagę na klucz <em>.spec.templates.spec.volumes</em>, definiuje on wolumin wykorzystujący mapę konfiguracyjną zdefiniowaną w pliku <em>configmap.yaml</em>. Klucz <em>.spec.templates.spec.containers.volumeMounts</em> służy do zamontowania tego woluminu w katalogu <em>/etc/config</em>. Dzięki temu wartość klucza <em>mongod.conf</em> zdefiniowana w pliku <em>configmap.yaml</em> będzie dostępna w kontenerze w pliku <em>/etc/config/mongod.conf</em>. Plik ten jest wskazywany w kluczu <em>.spec.templates.spec.containers.command</em> jako plik konfiguracyjny uruchamianego programu. Rodzaj uruchamianego programu zależy od wartości parametru <em>clusterRole</em>, w przypadku rutera zapytań uruchamiany jest program <em>/usr/bin/mongos</em>, w przypadku węzła konfiguracyjnego lub węzła fragmentu uruchamiany jest skrypt <em>/usr/local/bin/docker-entrypoint.sh</em>, który z kolei uruchamia proces <em>mongod</em>. Ruter zapytań nie potrzebuje trwałego woluminu, w związku z tym można by użyć instrukcji warunkowej aby dla tego typu węzłów pominąć w szablonie deklarację i montowanie trwałego woluminu.</p>
-<ol start="7" type="1">
+<ol>
 <li><p>Sprawdź formalną poprawność karty Helm dla parametrów węzłów konfiguracyjnych, w tym celu wykonaj w terminalu pomocniczym następujące polecenie:</p>
 <pre><code>helm lint ~/mongo-shrd \
   --set clusterRole=configsvr \
@@ -162,7 +162,7 @@ sh.addShard( &quot;shard-c/mongo-shard-c-0.mongo-shard-c:27018&quot;)</code></pr
 </section>
 <section id="rozpraszanie-kolekcji-dokumentów-na-poziome-fragmenty" data-number="1.2">
 <h2 data-number="3.2"><span class="header-section-number">3.2</span> Rozpraszanie kolekcji dokumentów na poziome fragmenty</h2>
-<ol type="1">
+<ol>
 <li><p>W narzędziu <em>mongo</em>, które jest przyłączone do rutera zapytań przełącz się na bazę danych <em>test</em>, wykorzystaj w tym celu poniższe polecenie:</p>
 <pre><code>use test</code></pre></li>
 <li><p>Włącz fragmentaryzację poziomą dla bazy <em>test</em>, uruchom następujące polecenie:</p>
@@ -265,7 +265,7 @@ sh.shardCollection(&quot;test.measurements&quot;, {&quot;metadata&quot;:&quot;ha
 </section>
 <section id="rozszerzenie-klastra-mongodb" data-number="1.3">
 <h2 data-number="3.3"><span class="header-section-number">3.3</span> Rozszerzenie klastra MongoDB</h2>
-<ol type="1">
+<ol>
 <li><p>Utwórz nowy zbiór replikacji o nazwie <em>shrad-d</em>. Skorzystaj ze składni polecenia umieszczonego w punkcie 12 rozdziału <em>Przygotowanie środowiska</em>. <mark>[Raport]</mark></p></li>
 <li><p>Zainicjalizuj zbiór replikacji o nazwie <em>shrad-d</em>. Skorzystaj ze składni poleceń umieszczonych w punkcie 16 rozdziału <em>Przygotowanie środowiska</em>. <mark>[Raport]</mark></p></li>
 <li><p>Dodaj zbiór replikacji o nazwie <em>shrad-d</em> do klastra. Skorzystaj ze składni poleceń umieszczonych w punkcie 18 rozdziału <em>Przygotowanie środowiska</em>. <mark>[Raport]</mark></p></li>
@@ -279,7 +279,7 @@ sh.shardCollection(&quot;test.measurements&quot;, {&quot;metadata&quot;:&quot;ha
 </section>
 <section id="skurczenie-klastra-mongodb" data-number="1.4">
 <h2 data-number="3.4"><span class="header-section-number">3.4</span> Skurczenie klastra MongoDB</h2>
-<ol type="1">
+<ol>
 <li><p>Upewnij się proces równoważenia ~~~~fragmentów jest aktywny:</p>
 <pre><code>sh.getBalancerState()</code></pre></li>
 <li><p>Zleć usunięcie węzła fragmentów o nazwie <em>shard-b</em>:</p>

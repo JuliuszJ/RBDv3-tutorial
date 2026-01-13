@@ -1,0 +1,114 @@
+k3d cluster stop RBDcluster
+sudo systemctl restart NetworkManager.service
+k3d cluster start RBDcluster
+
+
+kubectl cp postgres.properties trino-coordinator-0:/etc/trino/catalog/postgres.properties
+
+kubectl rollout restart trino-coordinator-0
+
+
+helm template rbd trino/trino | grep -i LoadBalancer
+
+
+helm install -f rbd-trino-values.yaml rbd trino/trino
+
+~/trino --server http://localhost:5435
+
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trino-catalog
+data:
+  postgresql.properties: |
+    connector.name=postgresql
+    connection-url=jdbc:postgresql://pgsql-rbd1-lb.default.svc.cluster.local:5432/postgres
+    connection-user=postgres
+    connection-password=rbd1
+	
+catalogs:
+  tpch: |
+    connector.name=tpch
+    tpch.splits-per-node=4
+  pgsql-rbd1: |
+    connector.name=postgresql
+    connection-url=jdbc:postgresql://pgsql-rbd1-lb.default.svc.cluster.local:5432/postgres
+    connection-user=postgres
+    connection-password=rbd1
+
+helm upgrade -f rbd-trino-values.yaml rbd trino/trino
+
+kubectl rollout restart deployment/rbd-trino-coordinator
+kubectl rollout status deployment/rbd-trino-coordinator
+
+show catalogs
+show schemas from "pgsql-rbd1"
+
+
+
+
+
+create table "pgsql-rbd1".public.nation as
+select * from tpch.tiny.nation;
+
+kubectl exec -it pgsql-rbd1-0 -- psql -U postgres
+analyze nation;
+kubectl exec -it mysql-rbd1-0 -- mysql -p
+analyze table rbd.customer;
+
+create table "mysql-rbd1".rbd.customer as
+select * from tpch.tiny.customer;
+
+SHOW STATS FOR "pgsql-rbd1".public.nation;
+SHOW STATS FOR "mysql-rbd1".rbd.customer;
+
+psql -U postgres -h localhost -p 5432 postgres 
+
+analyze public.nation;
+
+select count(*), n.name 
+from  "pgsql-rbd1".public.nation n join "mysql-rbd1".rbd.customer c 
+	on n.nationkey=c.nationkey
+group by n.name;
+
+select count(*), n.name 
+from  "pgsql-rbd1".public.nation n join "mysql-rbd1".rbd.customer c 
+	on n.nationkey=c.nationkey
+group by n.name;
+
+explain select count(*)
+from  "pgsql-rbd1".public.nation n join "mysql-rbd1".rbd.customer c 
+	on n.nationkey=c.nationkey
+where n.name = 'FRANCE';
+
+select count(*), n.regionkey 
+from  "pgsql-rbd1".public.nation n join "mysql-rbd1".rbd.customer c 
+	on n.nationkey=c.nationkey
+group by n.regionkey;
+
+explain select count(*)
+from  "pgsql-rbd1".public.nation n join "mysql-rbd1".rbd.customer c 
+	on n.nationkey=c.nationkey
+where n.regionkey=0;
+
+explain select distinct n.name
+from  "pgsql-rbd1".public.nation n join "mysql-rbd1".rbd.customer c 
+	on n.nationkey=c.nationkey
+where n.regionkey=0;
+
+explain select distinct n.name
+from  "pgsql-rbd1".public.nation n 
+where n.regionkey=0
+	and exists (select 1 from "mysql-rbd1".rbd.customer c 
+	where n.nationkey=c.nationkey);
+	
+explain select distinct n.name
+from  "pgsql-rbd1".public.nation n 
+where n.regionkey=0
+	and n.nationkey in (select c.nationkey from "mysql-rbd1".rbd.customer c );	
+
+
+helm upgrade -f rbd-trino-values.yaml rbd trino/trino
+
+helm delete rbd
